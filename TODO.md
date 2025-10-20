@@ -1,6 +1,21 @@
 # Freeform Idea Map — Engineering TODO
 
-Status: **Core MVP features implemented**. Major functionality working: note creation, editing, movement, connections, deletion, file I/O. Next: inspector panel, exports, advanced features.
+Status: **Major MVP milestone achieved**. Core functionality complete: note creation/editing/resizing, connections, selection, inspector panel, file I/O. Next: export system, advanced styling, file formats.
+
+## 🎉 Recently Completed (Latest Session)
+
+**Core Interactive Features:**
+- ✅ **Note System**: Double-click creation, Enter/Esc editing, drag movement, resize handles (E/S/SE), Delete key
+- ✅ **Connections**: Alt+drag between notes, visual dotted lines, auto-cleanup on note delete  
+- ✅ **Selection**: Click, Shift+click, marquee selection, Alt+drag subtract mode
+- ✅ **Inspector Panel**: Right sidebar with Note/Connection/Document tabs, live property editing
+- ✅ **Navigation**: Mouse wheel zoom, Space+drag pan, cursor feedback, HiDPI support
+- ✅ **File I/O**: JSON open/save with native dialogs, schema versioning
+
+**Architecture & Foundation:**
+- ✅ Tauri + React setup with TypeScript/Rust type synchronization
+- ✅ Canvas rendering with proper transforms and hit testing
+- ✅ Robust state management and component architecture
 
 ## Conventions
 
@@ -14,8 +29,8 @@ Status: **Core MVP features implemented**. Major functionality working: note cre
 ## Work Areas & Tasks
 
 ### 0) Project & Build
-- PB-1 [mvp] Setup Tauri + Vite React skeleton (universal macOS) — owner: unassigned — status: todo
-- PB-2 [mvp] Configure `tauri.conf.json` permissions (fs/dialog/shell minimal) — owner: unassigned — status: todo
+- PB-1 [mvp] Setup Tauri + Vite React skeleton (universal macOS) — owner: @amp — status: done
+- PB-2 [mvp] Configure `tauri.conf.json` permissions (fs/dialog/shell minimal) — owner: @amp — status: done
 - PB-3 [mvp] Add CI for build/test/lint; macOS universal target — owner: unassigned — status: todo
 - PB-4 [tech] Pre-commit formatting and linting (Rust + TS) — owner: unassigned — status: todo
 
@@ -33,11 +48,11 @@ Status: **Core MVP features implemented**. Major functionality working: note cre
 - CAN-4 [mvp] Zoom‑adaptive caches (text layout, thumbnails) — owner: unassigned — status: todo
 
 ### 3) Notes — Creation & Editing
-- NOTE-1 [mvp] Double‑click create; auto-size to content; resize — owner: @amp — status: done
+- NOTE-1 [mvp] Double‑click create; auto-size to content; resize — owner: @amp — status: done (with resize handles)
 - NOTE-2 [mvp] Edit mode toggles (Enter/Esc); multi‑line wraps — owner: @amp — status: done  
 - NOTE-3 [mvp] Markdown‑lite parsing toggle (basic styles) — owner: unassigned — status: todo
-- NOTE-4 [mvp] Duplicate/Delete with undo integration — owner: @amp — status: done (delete implemented)
-- NOTE-5 [mvp] Fade toggle (50% alpha) — owner: unassigned — status: todo
+- NOTE-4 [mvp] Duplicate/Delete with undo integration — owner: @amp — status: done (delete + connection cleanup)
+- NOTE-5 [mvp] Fade toggle (50% alpha) — owner: @amp — status: done (via inspector)
 
 ### 4) Selection & Movement  
 - SEL-1 [mvp] Click/shift additive selection; marquee subtract — owner: @amp — status: done
@@ -63,7 +78,7 @@ Status: **Core MVP features implemented**. Major functionality working: note cre
 - STK-3 [mvp] Align/Distribute within stack; same width/height — owner: unassigned — status: todo
 
 ### 8) Styles & Inspector
-- INS-1 [mvp] Right sidebar with Note/Shape/Connection/Document tabs — owner: unassigned — status: todo
+- INS-1 [mvp] Right sidebar with Note/Shape/Connection/Document tabs — owner: @amp — status: done (full inspector panel)
 - INS-2 [mvp] Save/apply reusable Note Styles (drag chip) — owner: unassigned — status: todo
 - INS-3 [mvp] Default styles persisted in document — owner: unassigned — status: todo
 - INS-4 [mvp] Global appearance: background color/texture; font — owner: unassigned — status: todo
@@ -79,7 +94,7 @@ Status: **Core MVP features implemented**. Major functionality working: note cre
 - SRCH-3 [mvp] Select by Style / Select by Fade — owner: unassigned — status: todo
 
 ### 11) Zoom, Pan, Focus
-- ZPF-1 [mvp] Wheel/pinch zoom at cursor; pan (space/middle) — owner: unassigned — status: todo
+- ZPF-1 [mvp] Wheel/pinch zoom at cursor; pan (space/middle) — owner: @amp — status: done (smooth zoom/pan)
 - ZPF-2 [mvp] Quick Zoom (hold Z) store/restore zoom+center — owner: unassigned — status: todo
 - ZPF-3 [mvp] Presets: 50/100/200; Fit Selection/Board; fullscreen — owner: unassigned — status: todo
 
