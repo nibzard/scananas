@@ -1,8 +1,16 @@
 # Freeform Idea Map — Engineering TODO
 
-Status: **Major MVP milestone achieved**. Core functionality complete: note creation/editing/resizing, connections, selection, inspector panel, file I/O. Next: export system, advanced styling, file formats.
+Status: **Enhanced MVP with Production Improvements**. Core functionality complete plus major enhancements: Tauri v2 migration, enhanced error handling, state management, DevTools integration, and security hardening. Ready for advanced features.
 
-## 🎉 Recently Completed (Latest Session)
+## 🎉 Recently Completed (Latest Session - December 2024)
+
+**Major Infrastructure Enhancements:**
+- ✅ **Tauri v2 Migration**: Complete upgrade from v1 to v2 with modern API patterns
+- ✅ **Enhanced Error Handling**: Detailed error messages, schema validation, async command improvements
+- ✅ **State Management**: Recent files tracking (10 most recent), last save path persistence
+- ✅ **DevTools Integration**: CrabNebula DevTools for development debugging and monitoring
+- ✅ **Security & Permissions**: Proper capability definitions, restricted file system access
+- ✅ **Future-Ready Files**: Support for .fim file format alongside JSON
 
 **Core Interactive Features:**
 - ✅ **Note System**: Double-click creation, Enter/Esc editing, drag movement, resize handles (E/S/SE), Delete key
@@ -10,12 +18,19 @@ Status: **Major MVP milestone achieved**. Core functionality complete: note crea
 - ✅ **Selection**: Click, Shift+click, marquee selection, Alt+drag subtract mode
 - ✅ **Inspector Panel**: Right sidebar with Note/Connection/Document tabs, live property editing
 - ✅ **Navigation**: Mouse wheel zoom, Space+drag pan, cursor feedback, HiDPI support
-- ✅ **File I/O**: JSON open/save with native dialogs, schema versioning
+- ✅ **File I/O**: Enhanced JSON open/save with native dialogs, schema versioning, recent files
 
 **Architecture & Foundation:**
-- ✅ Tauri + React setup with TypeScript/Rust type synchronization
+- ✅ Tauri v2 + React setup with TypeScript/Rust type synchronization
 - ✅ Canvas rendering with proper transforms and hit testing
 - ✅ Robust state management and component architecture
+- ✅ Production-ready build system and error handling
+
+**New Tauri Commands Available:**
+- `open_document()` - Enhanced with better error handling and recent files tracking
+- `save_document()` - Enhanced with validation and state management  
+- `get_recent_files()` - Returns list of 10 most recently accessed files
+- `clear_recent_files()` - Clears the recent files list
 
 ## Conventions
 
@@ -31,6 +46,9 @@ Status: **Major MVP milestone achieved**. Core functionality complete: note crea
 ### 0) Project & Build
 - PB-1 [mvp] Setup Tauri + Vite React skeleton (universal macOS) — owner: @amp — status: done
 - PB-2 [mvp] Configure `tauri.conf.json` permissions (fs/dialog/shell minimal) — owner: @amp — status: done
+- PB-2.1 [mvp] Tauri v2 migration with modern API patterns — owner: @amp — status: done
+- PB-2.2 [mvp] Enhanced capabilities and permissions configuration — owner: @amp — status: done
+- PB-2.3 [mvp] DevTools integration for development debugging — owner: @amp — status: done
 - PB-3 [mvp] Add CI for build/test/lint; macOS universal target — owner: unassigned — status: todo
 - PB-4 [tech] Pre-commit formatting and linting (Rust + TS) — owner: unassigned — status: todo
 
@@ -38,6 +56,9 @@ Status: **Major MVP milestone achieved**. Core functionality complete: note crea
 - DM-1 [mvp] Define TS/Rust schemas for entities (Note, Connection, Shape, Stack, Styles, Document) — owner: @amp — status: done
 - DM-2 [mvp] JSON serialization compatibility (`schemaVersion`) — owner: @amp — status: done
 - DM-2.5 [tech] JSON Open/Save stubs via Tauri commands — owner: @amp — status: done
+- DM-2.6 [mvp] Enhanced error handling and schema validation — owner: @amp — status: done
+- DM-2.7 [mvp] Recent files state management (10 most recent) — owner: @amp — status: done
+- DM-2.8 [mvp] Last save path tracking and persistence — owner: @amp — status: done
 - DM-3 [mvp] `.fim` zip container I/O (board.json + /media) — owner: unassigned — status: todo
 - DM-4 [mvp] Autosave every 30s + idle; recovery `.fim.recovery` — owner: unassigned — status: todo
 
@@ -56,7 +77,7 @@ Status: **Major MVP milestone achieved**. Core functionality complete: note crea
 
 ### 4) Selection & Movement  
 - SEL-1 [mvp] Click/shift additive selection; marquee subtract — owner: @amp — status: done
-- SEL-2 [mvp] Nudge (1px / 10px with Shift) — owner: unassigned — status: todo
+- SEL-2 [mvp] Nudge (1px / 10px with Shift) — owner: @amp — status: done
 - SEL-3 [mvp] Movement mode (M) arrow-keys continuous nudge — owner: unassigned — status: todo
 - SEL-4 [mvp] Shift-constrained drag (H/V) — owner: @amp — status: done (basic drag implemented)
 
@@ -122,9 +143,11 @@ Status: **Major MVP milestone achieved**. Core functionality complete: note crea
 - I18N-1 [mvp] UTF‑8, BiDi text via platform engines — owner: unassigned — status: todo
 
 ### 17) Security & Privacy
-- SEC-1 [mvp] No background network calls; offline by default — owner: unassigned — status: todo
+- SEC-1 [mvp] No background network calls; offline by default — owner: @amp — status: done (enforced by capabilities)
 - SEC-2 [mvp] Sanitize file:// links; warn on missing files — owner: unassigned — status: todo
 - SEC-3 [mvp] Crash logs local; optional opt‑in telemetry gates — owner: unassigned — status: todo
+- SEC-4 [mvp] Proper capability scoping for file system access — owner: @amp — status: done
+- SEC-5 [mvp] Dialog permissions with file type restrictions — owner: @amp — status: done
 
 ### 18) QA, Tooling, Fixtures
 - QA-1 [mvp] Test matrix per SPECS section 12 — owner: unassigned — status: todo
@@ -135,7 +158,18 @@ Status: **Major MVP milestone achieved**. Core functionality complete: note crea
 - PKG-1 [mvp] macOS codesign and notarization; universal build — owner: unassigned — status: todo
 - PKG-2 [mvp] Tauri updater channel wiring — owner: unassigned — status: todo
 
-### 20) Roadmap (Post‑MVP)
+### 20) Recent Files & UX Improvements
+- RF-1 [mvp] Recent files menu with 10 most recent documents — owner: @amp — status: done
+- RF-2 [mvp] Clear recent files command — owner: @amp — status: done
+- RF-3 [mvp] Remember last save location for quick save — owner: @amp — status: done
+- RF-4 [tech] Frontend integration for recent files UI — owner: unassigned — status: todo
+
+### 21) Development & Debugging
+- DEV-1 [tech] CrabNebula DevTools integration for debug builds — owner: @amp — status: done
+- DEV-2 [tech] Enhanced logging with structured commands — owner: @amp — status: done
+- DEV-3 [tech] Development-only performance monitoring — owner: @amp — status: done
+
+### 22) Roadmap (Post‑MVP)
 - RM-1 [post-mvp] Orthogonal routing / elbows for connectors — owner: unassigned — status: todo
 - RM-2 [post-mvp] Smart guides and snap alignment — owner: unassigned — status: todo
 - RM-3 [post-mvp] Additional shape types (ellipse/cloud) — owner: unassigned — status: todo
