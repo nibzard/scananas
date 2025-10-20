@@ -1,5 +1,6 @@
 import React from 'react'
 import { Canvas } from './canvas/Canvas'
+import { Inspector } from './Inspector'
 import type { BoardDocument } from '../model/types'
 import { makeEmptyDoc } from '../state'
 import { invoke } from '../bridge/tauri'
@@ -44,14 +45,25 @@ export function App() {
         <button onClick={onSave} style={btnStyle}>Save As…</button>
         <div style={{ marginLeft: 'auto', opacity: 0.7, fontSize: 12 }}>schema v{doc.schemaVersion}</div>
       </div>
-      <div style={{ flex: 1 }}>
-        <Canvas 
-          notes={doc.notes} 
+      <div style={{ flex: 1, display: 'flex' }}>
+        <div style={{ flex: 1 }}>
+          <Canvas 
+            notes={doc.notes} 
+            connections={doc.connections}
+            selectedIds={selection} 
+            onSelectionChange={setSelection}
+            onNotesChange={(notes) => setDoc(prev => ({ ...prev, notes }))}
+            onConnectionsChange={(connections) => setDoc(prev => ({ ...prev, connections }))}
+          />
+        </div>
+        <Inspector
+          selectedIds={selection}
+          notes={doc.notes}
           connections={doc.connections}
-          selectedIds={selection} 
-          onSelectionChange={setSelection}
+          document={doc}
           onNotesChange={(notes) => setDoc(prev => ({ ...prev, notes }))}
           onConnectionsChange={(connections) => setDoc(prev => ({ ...prev, connections }))}
+          onDocumentChange={setDoc}
         />
       </div>
     </div>

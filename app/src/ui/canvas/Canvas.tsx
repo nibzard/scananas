@@ -40,11 +40,12 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
   const panStartTxTy = useRef<{ tx: number; ty: number }>({ tx: 0, ty: 0 })
   const [marquee, setMarquee] = useState<null | { start: Point; end: Point; subtract: boolean }>(null)
   const [dragging, setDragging] = useState<{ 
-    type: 'move' | 'connect', 
+    type: 'move' | 'connect' | 'resize', 
     noteIds: string[], 
     startWorld: Point, 
     startFrames: Map<string, Rect>,
-    sourceNoteId?: string
+    sourceNoteId?: string,
+    resizeHandle?: 'se' | 'e' | 's'
   } | null>(null)
   const [editing, setEditing] = useState<{ noteId: string, text: string } | null>(null)
   const lastClickTime = useRef<number>(0)
@@ -503,6 +504,31 @@ function hitTest(notes: Note[], pWorld: Point): Note | null {
     const r = n.frame
     if (pWorld.x >= r.x && pWorld.x <= r.x + r.w && pWorld.y >= r.y && pWorld.y <= r.y + r.h) return n
   }
+  return null
+}
+
+function hitTestResizeHandle(note: Note, pWorld: Point, tolerance = 8): 'se' | 'e' | 's' | null {
+  const r = note.frame
+  const handleSize = tolerance
+  
+  // Southeast corner handle
+  if (pWorld.x >= r.x + r.w - handleSize && pWorld.x <= r.x + r.w + handleSize &&
+      pWorld.y >= r.y + r.h - handleSize && pWorld.y <= r.y + r.h + handleSize) {
+    return 'se'
+  }
+  
+  // East edge handle  
+  if (pWorld.x >= r.x + r.w - handleSize && pWorld.x <= r.x + r.w + handleSize &&
+      pWorld.y >= r.y + handleSize && pWorld.y <= r.y + r.h - handleSize) {
+    return 'e'
+  }
+  
+  // South edge handle
+  if (pWorld.x >= r.x + handleSize && pWorld.x <= r.x + r.w - handleSize &&
+      pWorld.y >= r.y + r.h - handleSize && pWorld.y <= r.y + r.h + handleSize) {
+    return 's'
+  }
+  
   return null
 }
 

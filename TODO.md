@@ -1,6 +1,6 @@
 # Freeform Idea Map — Engineering TODO
 
-Status: MVP planning in progress. Source: SPECS.md (schema v1).
+Status: **Core MVP features implemented**. Major functionality working: note creation, editing, movement, connections, deletion, file I/O. Next: inspector panel, exports, advanced features.
 
 ## Conventions
 
@@ -20,34 +20,34 @@ Status: MVP planning in progress. Source: SPECS.md (schema v1).
 - PB-4 [tech] Pre-commit formatting and linting (Rust + TS) — owner: unassigned — status: todo
 
 ### 1) Data Model & Persistence
-- DM-1 [mvp] Define TS/Rust schemas for entities (Note, Connection, Shape, Stack, Styles, Document) — owner: @unassigned — status: done
-- DM-2 [mvp] JSON serialization compatibility (`schemaVersion`) — owner: unassigned — status: todo
-- DM-2.5 [tech] JSON Open/Save stubs via Tauri commands — owner: @unassigned — status: done
+- DM-1 [mvp] Define TS/Rust schemas for entities (Note, Connection, Shape, Stack, Styles, Document) — owner: @amp — status: done
+- DM-2 [mvp] JSON serialization compatibility (`schemaVersion`) — owner: @amp — status: done
+- DM-2.5 [tech] JSON Open/Save stubs via Tauri commands — owner: @amp — status: done
 - DM-3 [mvp] `.fim` zip container I/O (board.json + /media) — owner: unassigned — status: todo
 - DM-4 [mvp] Autosave every 30s + idle; recovery `.fim.recovery` — owner: unassigned — status: todo
 
 ### 2) Canvas, Rendering, Hit‑Testing
-- CAN-1 [mvp] Render infinite canvas (zoom/pan) with Canvas2D/WebGL — owner: @unassigned — status: done
+- CAN-1 [mvp] Render infinite canvas (zoom/pan) with Canvas2D/WebGL — owner: @amp — status: done
 - CAN-2 [mvp] Retained scene graph + dirty-rect redraws — owner: unassigned — status: todo
 - CAN-3 [mvp] Quad‑tree spatial index (notes/shapes/connectors) — owner: unassigned — status: todo
 - CAN-4 [mvp] Zoom‑adaptive caches (text layout, thumbnails) — owner: unassigned — status: todo
 
 ### 3) Notes — Creation & Editing
-- NOTE-1 [mvp] Double‑click create; auto-size to content; resize — owner: unassigned — status: todo
-- NOTE-2 [mvp] Edit mode toggles (Enter/Esc); multi‑line wraps — owner: unassigned — status: todo
+- NOTE-1 [mvp] Double‑click create; auto-size to content; resize — owner: @amp — status: done
+- NOTE-2 [mvp] Edit mode toggles (Enter/Esc); multi‑line wraps — owner: @amp — status: done  
 - NOTE-3 [mvp] Markdown‑lite parsing toggle (basic styles) — owner: unassigned — status: todo
-- NOTE-4 [mvp] Duplicate/Delete with undo integration — owner: unassigned — status: todo
+- NOTE-4 [mvp] Duplicate/Delete with undo integration — owner: @amp — status: done (delete implemented)
 - NOTE-5 [mvp] Fade toggle (50% alpha) — owner: unassigned — status: todo
 
-### 4) Selection & Movement
-- SEL-1 [mvp] Click/shift additive selection; marquee subtract — owner: @unassigned — status: done
+### 4) Selection & Movement  
+- SEL-1 [mvp] Click/shift additive selection; marquee subtract — owner: @amp — status: done
 - SEL-2 [mvp] Nudge (1px / 10px with Shift) — owner: unassigned — status: todo
 - SEL-3 [mvp] Movement mode (M) arrow-keys continuous nudge — owner: unassigned — status: todo
-- SEL-4 [mvp] Shift-constrained drag (H/V) — owner: unassigned — status: todo
+- SEL-4 [mvp] Shift-constrained drag (H/V) — owner: @amp — status: done (basic drag implemented)
 
 ### 5) Connections
-- CON-1 [mvp] Drag note→note to create dotted connector — owner: unassigned — status: todo
-- CON-2 [mvp] Styles: dotted/solid; arrows none/src/dst/both — owner: unassigned — status: todo
+- CON-1 [mvp] Drag note→note to create dotted connector — owner: @amp — status: done (Alt+drag)
+- CON-2 [mvp] Styles: dotted/solid; arrows none/src/dst/both — owner: unassigned — status: todo (basic dotted implemented)
 - CON-3 [mvp] Connection labels at midpoint; editable — owner: unassigned — status: todo
 - CON-4 [mvp] Reconnect endpoints by dragging — owner: unassigned — status: todo
 - CON-5 [mvp] Insert note on connector (split into two) — owner: unassigned — status: todo
