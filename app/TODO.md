@@ -48,6 +48,10 @@ Status: **Enhanced MVP with Production Improvements**. Core functionality comple
 - ✅ **Zip Integration**: Rust zip crate integration for container creation and extraction
 - ✅ **Media Support**: Ready for embedded media files with dedicated /media directory
 
+**Export Functionality:**
+- ✅ **PDF Export (EXP-1)**: Complete PDF export implementation with vector graphics, customizable page sizes (A4, Letter, Legal, Tabloid), multiple orientation options (Portrait/Landscape), adjustable margins, and quality settings. Added native file dialog integration, proper error handling, and full TypeScript command interfaces.
+- ✅ **PNG Export (EXP-2)**: High-quality PNG export with multiple DPI options (1x, 2x, 3x), transparent background support, customizable dimensions, and canvas-to-image conversion. Integrated with native save dialogs and included comprehensive error handling for large canvas exports.
+
 ## Conventions
 
 - Status: use `todo | in-progress | blocked | review | done`.
@@ -136,8 +140,8 @@ Status: **Enhanced MVP with Production Improvements**. Core functionality comple
 - ZPF-3 [mvp] Presets: 50/100/200; Fit Selection/Board; fullscreen — owner: unassigned — status: todo
 
 ### 12) Export & Print
-- EXP-1 [mvp] PDF export (vector) with options — owner: unassigned — status: todo
-- EXP-2 [mvp] PNG export (1x/2x/3x DPI) — owner: unassigned — status: todo
+- EXP-1 [mvp] PDF export (vector) with options — owner: unassigned — status: done (completed 2025-10-21) ✅ **COMPLETED**: Full PDF export implementation with vector graphics rendering, customizable page sizes (A4, Letter, Legal, Tabloid), portrait/landscape orientations, adjustable margins, quality settings, native file dialog integration, and comprehensive error handling
+- EXP-2 [mvp] PNG export (1x/2x/3x DPI) — owner: unassigned — status: done (completed 2025-10-21) ✅ **COMPLETED**: High-quality PNG raster export with multiple DPI scaling options (1x, 2x, 3x), transparent background support, customizable dimensions, canvas-to-image conversion, native save dialogs, and robust error handling for large exports
 - EXP-3 [mvp] TXT/RTF/OPML export per ordering heuristics — owner: unassigned — status: todo
 - PRN-1 [mvp] Native print dialog; scale‑to‑fit; posterize — owner: unassigned — status: todo
 

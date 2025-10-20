@@ -9,8 +9,8 @@ import type { BoardDocument } from '../model/types'
 import { makeEmptyDoc } from '../state'
 import { useCommandStack } from '../hooks/useCommandStack'
 import { useAutosave } from '../hooks/useAutosave'
-import { openDocument, openSpecificDocument, saveDocument, checkRecoveryFiles } from '../bridge/tauri'
-import { exportToPNG, exportToTXT, exportToPDF, downloadFile, downloadText } from '../export/canvasExport'
+import { openDocument, openSpecificDocument, saveDocument, checkRecoveryFiles, exportDocumentAsText } from '../bridge/tauri'
+import { exportToPNG, exportToTXT, exportToPDF, exportToRTF, exportToOPML, downloadFile, downloadText } from '../export/canvasExport'
 import { UpdateNotesCommand, UpdateConnectionsCommand } from '../state/commands'
 
 interface AutosaveInfo {
@@ -57,6 +57,7 @@ export function App() {
   const [recoveryFiles, setRecoveryFiles] = React.useState<AutosaveInfo[]>([])
   const [showRecoveryDialog, setShowRecoveryDialog] = React.useState(false)
   const [isDirty, setIsDirty] = React.useState(false)
+  const [textOrdering, setTextOrdering] = React.useState<'spatial' | 'connections' | 'hierarchical'>('spatial')
 
   // Initialize autosave functionality
   const {
@@ -130,14 +131,30 @@ export function App() {
     }
   }
 
-  const onExportTXT = async () => {
+  const onExportTXT = async (ordering = 'spatial') => {
     try {
-      const content = exportToTXT(doc)
-      const filename = `fim-export-${Date.now()}.txt`
-      downloadText(content, filename)
-      console.log('TXT exported:', filename)
+      const savedPath = await exportDocumentAsText(doc, 'txt', ordering)
+      console.log('TXT exported:', savedPath)
     } catch (e) {
       console.warn('TXT export failed', e)
+    }
+  }
+
+  const onExportRTF = async (ordering = 'spatial') => {
+    try {
+      const savedPath = await exportDocumentAsText(doc, 'rtf', ordering)
+      console.log('RTF exported:', savedPath)
+    } catch (e) {
+      console.warn('RTF export failed', e)
+    }
+  }
+
+  const onExportOPML = async (ordering = 'spatial') => {
+    try {
+      const savedPath = await exportDocumentAsText(doc, 'opml', ordering)
+      console.log('OPML exported:', savedPath)
+    } catch (e) {
+      console.warn('OPML export failed', e)
     }
   }
 
@@ -234,8 +251,28 @@ export function App() {
         </button>
         <div style={{ height: 24, width: 1, background: '#333', margin: '0 4px' }} />
         <button onClick={onExportPNG} style={btnStyle}>Export PNG</button>
-        <button onClick={onExportTXT} style={btnStyle}>Export TXT</button>
         <button onClick={onExportPDF} style={btnStyle}>Export PDF</button>
+        <div style={{ height: 24, width: 1, background: '#333', margin: '0 4px' }} />
+        <select
+          value={textOrdering}
+          onChange={(e) => setTextOrdering(e.target.value as 'spatial' | 'connections' | 'hierarchical')}
+          style={{
+            background: '#222',
+            color: '#eee',
+            border: '1px solid #555',
+            padding: '2px 6px',
+            fontSize: '12px',
+            borderRadius: '3px'
+          }}
+          title="Text ordering heuristic"
+        >
+          <option value="spatial">Spatial Order</option>
+          <option value="connections">Connection Order</option>
+          <option value="hierarchical">Hierarchical Order</option>
+        </select>
+        <button onClick={() => onExportTXT(textOrdering)} style={btnStyle}>Export TXT</button>
+        <button onClick={() => onExportRTF(textOrdering)} style={btnStyle}>Export RTF</button>
+        <button onClick={() => onExportOPML(textOrdering)} style={btnStyle}>Export OPML</button>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
           <button onClick={() => setShowHelp(true)} style={{ ...btnStyle, background: '#333' }}>
             Help (?)

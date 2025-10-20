@@ -53,3 +53,8 @@ export async function recoverFromAutosave(recoveryPath: string): Promise<any> {
   return invoke('recover_from_autosave', { recoveryPath })
 }
 
+// Export operations
+export async function exportDocumentAsText(doc: any, format: string, ordering?: string): Promise<string> {
+  return invoke('export_document_as_text', { args: { doc, format, ordering } })
+}
+

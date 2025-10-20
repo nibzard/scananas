@@ -2,11 +2,12 @@ import type { BoardDocument, Note, Connection } from '../model/types'
 import { jsPDF } from 'jspdf'
 
 export interface ExportOptions {
-  format: 'png' | 'pdf' | 'txt'
+  format: 'png' | 'pdf' | 'txt' | 'rtf' | 'opml'
   scale?: number
   background?: string
   includeFaded?: boolean
   margin?: number
+  textOrdering?: 'spatial' | 'connections' | 'hierarchical'
 }
 
 export async function exportToPNG(
@@ -58,35 +59,311 @@ export async function exportToPNG(
   })
 }
 
-export function exportToTXT(document: BoardDocument): string {
+export function exportToTXT(document: BoardDocument, options: ExportOptions = { format: 'txt' }): string {
+  const ordering = options.textOrdering || 'spatial'
   let output = 'Freeform Idea Map Export\n'
   output += '='.repeat(30) + '\n\n'
-  
+
+  // Get ordered notes based on heuristic
+  const orderedNotes = orderNotesByHeuristic(document, ordering)
+
   // Add notes
   output += 'NOTES:\n\n'
-  document.notes.forEach((note, index) => {
+  orderedNotes.forEach((note, index) => {
     output += `${index + 1}. ${note.text}\n`
     if (note.faded) output += '   (faded)\n'
     output += '\n'
   })
-  
-  // Add connections
+
+  // Add connections with context
   if (document.connections.length > 0) {
     output += '\nCONNECTIONS:\n\n'
     document.connections.forEach((conn, index) => {
       const srcNote = document.notes.find(n => n.id === conn.srcNoteId)
       const dstNote = document.notes.find(n => n.id === conn.dstNoteId)
       if (srcNote && dstNote) {
-        output += `${index + 1}. "${srcNote.text}" → "${dstNote.text}"\n`
+        const srcIndex = orderedNotes.findIndex(n => n.id === srcNote.id) + 1
+        const dstIndex = orderedNotes.findIndex(n => n.id === dstNote.id) + 1
+        output += `${index + 1}. [${srcIndex}] → [${dstIndex}]: "${srcNote.text}" → "${dstNote.text}"\n`
         if (conn.label) output += `   Label: ${conn.label}\n`
+        if (conn.style?.kind) output += `   Style: ${conn.style.kind}\n`
+        if (conn.style?.arrows && conn.style.arrows !== 'none') output += `   Arrows: ${conn.style.arrows}\n`
       }
     })
   }
-  
+
+  // Add stacks information
+  if (document.stacks.length > 0) {
+    output += '\nSTACKS:\n\n'
+    document.stacks.forEach((stack, index) => {
+      output += `${index + 1}. Stack (${stack.noteIds.length} notes):\n`
+      stack.noteIds.forEach(noteId => {
+        const note = document.notes.find(n => n.id === noteId)
+        const noteIndex = orderedNotes.findIndex(n => n.id === noteId) + 1
+        if (note) {
+          output += `   - [${noteIndex}] ${note.text}\n`
+        }
+      })
+      output += '\n'
+    })
+  }
+
   output += `\nGenerated: ${new Date().toLocaleString()}\n`
+  output += `Ordering: ${ordering}\n`
   output += `${document.notes.length} notes, ${document.connections.length} connections\n`
-  
+
   return output
+}
+
+export function exportToRTF(document: BoardDocument, options: ExportOptions = { format: 'rtf' }): string {
+  const ordering = options.textOrdering || 'spatial'
+  const orderedNotes = orderNotesByHeuristic(document, ordering)
+
+  let rtf = '{\\rtf1\\ansi\\deff0 {\\fonttbl {\\f0 Times New Roman;}}'
+  rtf += '{\\colortbl ;\\red0\\green0\\blue0;\\red100\\green100\\blue100;}'
+  rtf += '\\fs24\\pard\\qc\\b Freeform Idea Map Export\\b0\\par\\par\\pard\\ql'
+
+  // Notes section
+  rtf += '\\b Notes\\b0\\par\\par'
+  orderedNotes.forEach((note, index) => {
+    rtf += `${index + 1}. ${rtfEscape(note.text)}`
+    if (note.faded) rtf += '\\cf1 (faded)\\cf0'
+    rtf += '\\par\\par'
+  })
+
+  // Connections section
+  if (document.connections.length > 0) {
+    rtf += '\\b Connections\\b0\\par\\par'
+    document.connections.forEach((conn, index) => {
+      const srcNote = document.notes.find(n => n.id === conn.srcNoteId)
+      const dstNote = document.notes.find(n => n.id === conn.dstNoteId)
+      if (srcNote && dstNote) {
+        const srcIndex = orderedNotes.findIndex(n => n.id === srcNote.id) + 1
+        const dstIndex = orderedNotes.findIndex(n => n.id === dstNote.id) + 1
+        rtf += `${index + 1}. [${srcIndex}] → [${dstIndex}]: ${rtfEscape(srcNote.text)} → ${rtfEscape(dstNote.text)}\\par`
+        if (conn.label) rtf += `   Label: ${rtfEscape(conn.label)}\\par`
+      }
+    })
+  }
+
+  // Metadata
+  rtf += '\\par\\par'
+  rtf += `Generated: ${new Date().toLocaleString()}\\par`
+  rtf += `Ordering: ${ordering}\\par`
+  rtf += `${document.notes.length} notes, ${document.connections.length} connections\\par`
+  rtf += '}'
+
+  return rtf
+}
+
+export function exportToOPML(document: BoardDocument, options: ExportOptions = { format: 'opml' }): string {
+  const ordering = options.textOrdering || 'spatial'
+  const orderedNotes = orderNotesByHeuristic(document, ordering)
+
+  let opml = '<?xml version="1.0" encoding="UTF-8"?>\n'
+  opml += '<opml version="2.0">\n'
+  opml += '  <head>\n'
+  opml += `    <title>Freeform Idea Map Export</title>\n`
+  opml += `    <dateCreated>${new Date().toISOString()}</dateCreated>\n`
+  opml += `    <expansionState>1,2,3</expansionState>\n`
+  opml += '  </head>\n'
+  opml += '  <body>\n'
+
+  // Create hierarchical structure based on connections
+  const processed = new Set<string>()
+  const rootNotes = orderedNotes.filter(note => {
+    const hasIncoming = document.connections.some(c => c.dstNoteId === note.id)
+    return !hasIncoming
+  })
+
+  // Add root notes and their connections
+  rootNotes.forEach(note => {
+    opml += `    <outline text="${opmlEscape(note.text)}"${note.faded ? ' _faded="true"' : ''}>\n`
+    processed.add(note.id)
+
+    // Add connected notes as children
+    const children = document.connections
+      .filter(c => c.srcNoteId === note.id)
+      .map(c => document.notes.find(n => n.id === c.dstNoteId))
+      .filter(Boolean) as Note[]
+
+    children.forEach(child => {
+      opml += addNoteToOPML(child, document, processed, 6)
+    })
+
+    opml += '    </outline>\n'
+  })
+
+  // Add any remaining notes (orphans)
+  orderedNotes.forEach(note => {
+    if (!processed.has(note.id)) {
+      opml += `    <outline text="${opmlEscape(note.text)}"${note.faded ? ' _faded="true"' : ''}/>\n`
+    }
+  })
+
+  // Add connections as separate outlines for reference
+  if (document.connections.length > 0) {
+    opml += '    <outline text="Connections" _isConnections="true">\n'
+    document.connections.forEach((conn, index) => {
+      const srcNote = document.notes.find(n => n.id === conn.srcNoteId)
+      const dstNote = document.notes.find(n => n.id === conn.dstNoteId)
+      if (srcNote && dstNote) {
+        const srcIndex = orderedNotes.findIndex(n => n.id === srcNote.id) + 1
+        const dstIndex = orderedNotes.findIndex(n => n.id === dstNote.id) + 1
+        opml += `      <outline text="[${srcIndex}] → [${dstIndex}]: ${opmlEscape(srcNote.text)} → ${opmlEscape(dstNote.text)}"`
+        if (conn.label) opml += ` _label="${opmlEscape(conn.label)}"`
+        opml += '/>\n'
+      }
+    })
+    opml += '    </outline>\n'
+  }
+
+  opml += '  </body>\n'
+  opml += '</opml>\n'
+
+  return opml
+}
+
+// Helper functions for text ordering heuristics
+function orderNotesByHeuristic(document: BoardDocument, ordering: 'spatial' | 'connections' | 'hierarchical'): Note[] {
+  switch (ordering) {
+    case 'spatial':
+      return orderNotesSpatially(document.notes)
+    case 'connections':
+      return orderNotesByConnections(document.notes, document.connections)
+    case 'hierarchical':
+      return orderNotesHierarchically(document.notes, document.connections, document.stacks)
+    default:
+      return document.notes
+  }
+}
+
+function orderNotesSpatially(notes: Note[]): Note[] {
+  return [...notes].sort((a, b) => {
+    // Sort by row first, then by column
+    const rowA = Math.floor(a.frame.y / 100) // Group notes in 100px rows
+    const rowB = Math.floor(b.frame.y / 100)
+    if (rowA !== rowB) return rowA - rowB
+
+    return a.frame.x - b.frame.x
+  })
+}
+
+function orderNotesByConnections(notes: Note[], connections: Connection[]): Note[] {
+  const noteIds = new Set(notes.map(n => n.id))
+  const ordered: Note[] = []
+  const processed = new Set<string>()
+
+  // Find root notes (no incoming connections)
+  const rootNotes = notes.filter(note =>
+    !connections.some(c => c.dstNoteId === note.id)
+  )
+
+  // Process each root note and its connections
+  rootNotes.forEach(root => {
+    if (!processed.has(root.id)) {
+      ordered.push(root)
+      processed.add(root.id)
+      addConnectedNotes(root.id, connections, notes, processed, ordered)
+    }
+  })
+
+  // Add any remaining notes (orphans)
+  notes.forEach(note => {
+    if (!processed.has(note.id)) {
+      ordered.push(note)
+    }
+  })
+
+  return ordered
+}
+
+function addConnectedNotes(noteId: string, connections: Connection[], notes: Note[], processed: Set<string>, ordered: Note[]) {
+  const outgoing = connections
+    .filter(c => c.srcNoteId === noteId)
+    .sort((a, b) => {
+      // Sort by label alphabetically if present, otherwise by note text
+      const aLabel = a.label || notes.find(n => n.id === a.dstNoteId)?.text || ''
+      const bLabel = b.label || notes.find(n => n.id === b.dstNoteId)?.text || ''
+      return aLabel.localeCompare(bLabel)
+    })
+
+  outgoing.forEach(conn => {
+    if (!processed.has(conn.dstNoteId)) {
+      const targetNote = notes.find(n => n.id === conn.dstNoteId)
+      if (targetNote) {
+        ordered.push(targetNote)
+        processed.add(targetNote.id)
+        addConnectedNotes(targetNote.id, connections, notes, processed, ordered)
+      }
+    }
+  })
+}
+
+function orderNotesHierarchically(notes: Note[], connections: Connection[], stacks: Stack[]): Note[] {
+  const ordered: Note[] = []
+  const processed = new Set<string>()
+
+  // First, process stacks in order
+  stacks.forEach(stack => {
+    stack.noteIds.forEach(noteId => {
+      const note = notes.find(n => n.id === noteId)
+      if (note && !processed.has(noteId)) {
+        ordered.push(note)
+        processed.add(noteId)
+      }
+    })
+  })
+
+  // Then process remaining notes by connections
+  const remainingNotes = notes.filter(n => !processed.has(n.id))
+  const connectionOrdered = orderNotesByConnections(remainingNotes, connections)
+  ordered.push(...connectionOrdered)
+
+  return ordered
+}
+
+function rtfEscape(text: string): string {
+  return text
+    .replace(/\\/g, '\\\\')
+    .replace(/{/g, '\\{')
+    .replace(/}/g, '\\}')
+    .replace(/\n/g, '\\par ')
+    .replace(/\t/g, '\\tab ')
+}
+
+function opmlEscape(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function addNoteToOPML(note: Note, document: BoardDocument, processed: Set<string>, indent: string): string {
+  if (processed.has(note.id)) return ''
+
+  let opml = `${indent}<outline text="${opmlEscape(note.text)}"${note.faded ? ' _faded="true"' : ''}`
+  processed.add(note.id)
+
+  // Find children
+  const children = document.connections
+    .filter(c => c.srcNoteId === note.id)
+    .map(c => document.notes.find(n => n.id === c.dstNoteId))
+    .filter(Boolean) as Note[]
+
+  if (children.length > 0) {
+    opml += '>\n'
+    children.forEach(child => {
+      opml += addNoteToOPML(child, document, processed, indent + '  ')
+    })
+    opml += `${indent}</outline>\n`
+  } else {
+    opml += '/>\n'
+  }
+
+  return opml
 }
 
 export async function exportToPDF(
