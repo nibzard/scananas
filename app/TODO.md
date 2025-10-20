@@ -142,7 +142,7 @@ Status: **Enhanced MVP with Production Improvements**. Core functionality comple
 ### 12) Export & Print
 - EXP-1 [mvp] PDF export (vector) with options — owner: unassigned — status: done (completed 2025-10-21) ✅ **COMPLETED**: Full PDF export implementation with vector graphics rendering, customizable page sizes (A4, Letter, Legal, Tabloid), portrait/landscape orientations, adjustable margins, quality settings, native file dialog integration, and comprehensive error handling
 - EXP-2 [mvp] PNG export (1x/2x/3x DPI) — owner: unassigned — status: done (completed 2025-10-21) ✅ **COMPLETED**: High-quality PNG raster export with multiple DPI scaling options (1x, 2x, 3x), transparent background support, customizable dimensions, canvas-to-image conversion, native save dialogs, and robust error handling for large exports
-- EXP-3 [mvp] TXT/RTF/OPML export per ordering heuristics — owner: unassigned — status: todo
+- ✅ EXP-3 [mvp] TXT/RTF/OPML export per ordering heuristics — owner: niko — status: done (completed 2025-10-21) ✅ **COMPLETED**: Full text export system implementation with intelligent ordering heuristics (spatial, connections, hierarchical), complete Tauri backend commands for TXT/RTF/OPML formats, frontend UI integration with format selection and ordering options, proper file dialog integration, and comprehensive error handling. Complements existing PDF/PNG export system to provide complete export suite.
 - PRN-1 [mvp] Native print dialog; scale‑to‑fit; posterize — owner: unassigned — status: todo
 
 ### 13) Undo / Redo

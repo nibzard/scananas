@@ -179,7 +179,7 @@ Status: **Enhanced MVP with Production Improvements + Critical Fixes**. Core fun
 ### 12) Export & Print
 - EXP-1 [mvp] PDF export (vector) with options — owner: unassigned — status: todo
 - EXP-2 [mvp] PNG export (1x/2x/3x DPI) — owner: unassigned — status: todo
-- EXP-3 [mvp] TXT/RTF/OPML export per ordering heuristics — owner: unassigned — status: todo
+- ✅ EXP-3 [mvp] TXT/RTF/OPML export per ordering heuristics — owner: niko — status: completed — **Complete export system with intelligent text ordering (spatial, connections, hierarchical), Tauri backend commands, and UI integration**
 - PRN-1 [mvp] Native print dialog; scale‑to‑fit; posterize — owner: unassigned — status: todo
 
 ### 13) Undo / Redo
