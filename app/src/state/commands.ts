@@ -344,3 +344,67 @@ export class DeleteConnectionCommand implements Command {
     }
   }
 }
+
+export class UpdateNotesCommand implements Command {
+  description = 'Update note properties'
+  private readonly noteIds: string[]
+  private readonly updates: Partial<Note>
+  private readonly previousStates: Note[]
+
+  constructor(noteIds: string[], updates: Partial<Note>, previousStates: Note[]) {
+    this.noteIds = noteIds
+    this.updates = updates
+    this.previousStates = previousStates
+  }
+
+  execute(doc: BoardDocument): BoardDocument {
+    return {
+      ...doc,
+      notes: doc.notes.map(note =>
+        this.noteIds.includes(note.id) ? { ...note, ...this.updates } : note
+      )
+    }
+  }
+
+  undo(doc: BoardDocument): BoardDocument {
+    const idToPrevious = new Map(this.previousStates.map(n => [n.id, n]))
+    return {
+      ...doc,
+      notes: doc.notes.map(note =>
+        idToPrevious.has(note.id) ? idToPrevious.get(note.id)! : note
+      )
+    }
+  }
+}
+
+export class UpdateConnectionsCommand implements Command {
+  description = 'Update connection properties'
+  private readonly connectionIds: string[]
+  private readonly updates: Partial<Connection>
+  private readonly previousStates: Connection[]
+
+  constructor(connectionIds: string[], updates: Partial<Connection>, previousStates: Connection[]) {
+    this.connectionIds = connectionIds
+    this.updates = updates
+    this.previousStates = previousStates
+  }
+
+  execute(doc: BoardDocument): BoardDocument {
+    return {
+      ...doc,
+      connections: doc.connections.map(conn =>
+        this.connectionIds.includes(conn.id) ? { ...conn, ...this.updates } : conn
+      )
+    }
+  }
+
+  undo(doc: BoardDocument): BoardDocument {
+    const idToPrevious = new Map(this.previousStates.map(c => [c.id, c]))
+    return {
+      ...doc,
+      connections: doc.connections.map(conn =>
+        idToPrevious.has(conn.id) ? idToPrevious.get(conn.id)! : conn
+      )
+    }
+  }
+}

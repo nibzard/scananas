@@ -8,7 +8,9 @@ import {
   EditNoteTextCommand,
   ResizeNoteCommand,
   CreateConnectionCommand,
-  DeleteConnectionCommand
+  DeleteConnectionCommand,
+  UpdateNotesCommand,
+  UpdateConnectionsCommand
 } from '../../state/commands'
 
 type Props = {
@@ -72,10 +74,24 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
 
   // For undo/redo support during continuous operations
   const initialNoteStates = useRef<Map<string, Note> | null>(null)
+  const initialConnectionStates = useRef<Map<string, Connection> | null>(null)
+  const continuousOperationType = useRef<'move' | 'resize' | 'movement-mode' | null>(null)
 
   // Continuous movement function
   const performContinuousMovement = () => {
     if (!movementMode || selectedIds.length === 0 || !onNotesChange) return
+
+    // Track initial state for undo/redo when movement mode starts
+    if (continuousOperationType.current !== 'movement-mode') {
+      continuousOperationType.current = 'movement-mode'
+      initialNoteStates.current = new Map()
+      selectedIds.forEach(id => {
+        const note = notes.find(n => n.id === id)
+        if (note) {
+          initialNoteStates.current!.set(id, { ...note })
+        }
+      })
+    }
 
     let dx = 0, dy = 0
     const moveDistance = 2 // Base movement speed for continuous mode
@@ -269,7 +285,33 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
           clearInterval(movementInterval.current)
           movementInterval.current = null
 
-          // Call onDragEnd to create a single undo/redo entry for the entire movement session
+          // Create undo command for the entire movement session
+          if (onExecuteCommand && continuousOperationType.current === 'movement-mode' && initialNoteStates.current) {
+            const movements = new Map<string, { dx: number; dy: number }>()
+
+            selectedIds.forEach(id => {
+              const initialState = initialNoteStates.current!.get(id)
+              const currentState = notes.find(n => n.id === id)
+
+              if (initialState && currentState) {
+                movements.set(id, {
+                  dx: currentState.frame.x - initialState.frame.x,
+                  dy: currentState.frame.y - initialState.frame.y
+                })
+              }
+            })
+
+            // Only create command if there was actual movement
+            if (movements.size > 0 && Array.from(movements.values()).some(m => m.dx !== 0 || m.dy !== 0)) {
+              onExecuteCommand(new MoveNotesCommand(movements))
+            }
+
+            // Reset tracking state
+            continuousOperationType.current = null
+            initialNoteStates.current = null
+          }
+
+          // Call onDragEnd to clear temporary state
           if (onDragEnd) {
             onDragEnd()
           }
@@ -485,6 +527,12 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
             // Start resize operation
             const startFrames = new Map<string, Rect>()
             startFrames.set(selectedNote.id, { ...selectedNote.frame })
+
+            // Track initial state for undo/redo
+            continuousOperationType.current = 'resize'
+            initialNoteStates.current = new Map()
+            initialNoteStates.current.set(selectedNote.id, { ...selectedNote })
+
             setDragging({
               type: 'resize',
               noteIds: [selectedNote.id],
@@ -535,6 +583,19 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
         })
 
         const dragType = e.altKey ? 'connect' : 'move'
+
+        // Track initial state for undo/redo
+        if (dragType === 'move') {
+          continuousOperationType.current = 'move'
+          initialNoteStates.current = new Map()
+          dragIds.forEach(id => {
+            const note = notes.find(n => n.id === id)
+            if (note) {
+              initialNoteStates.current!.set(id, { ...note })
+            }
+          })
+        }
+
         setDragging({
           type: dragType,
           noteIds: dragIds,
@@ -656,6 +717,48 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
         }
       }
       
+      // Create undo commands for continuous operations
+      if (dragging && onExecuteCommand) {
+        if (dragging.type === 'move' && continuousOperationType.current === 'move' && initialNoteStates.current) {
+          const movements = new Map<string, { dx: number; dy: number }>()
+
+          dragging.noteIds.forEach(id => {
+            const initialState = initialNoteStates.current!.get(id)
+            const currentState = notes.find(n => n.id === id)
+
+            if (initialState && currentState) {
+              movements.set(id, {
+                dx: currentState.frame.x - initialState.frame.x,
+                dy: currentState.frame.y - initialState.frame.y
+              })
+            }
+          })
+
+          // Only create command if there was actual movement
+          if (movements.size > 0 && Array.from(movements.values()).some(m => m.dx !== 0 || m.dy !== 0)) {
+            onExecuteCommand(new MoveNotesCommand(movements))
+          }
+        } else if (dragging.type === 'resize' && continuousOperationType.current === 'resize' && initialNoteStates.current) {
+          const noteId = dragging.noteIds[0]
+          const initialState = initialNoteStates.current.get(noteId)
+          const currentState = notes.find(n => n.id === noteId)
+
+          if (initialState && currentState) {
+            const oldFrame = initialState.frame
+            const newFrame = currentState.frame
+
+            // Only create command if there was actual resize
+            if (oldFrame.w !== newFrame.w || oldFrame.h !== newFrame.h) {
+              onExecuteCommand(new ResizeNoteCommand(noteId, oldFrame, newFrame))
+            }
+          }
+        }
+
+        // Reset tracking state
+        continuousOperationType.current = null
+        initialNoteStates.current = null
+      }
+
       setDragging(null)
 
       // Call onDragEnd when dragging operations complete

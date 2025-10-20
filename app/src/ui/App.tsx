@@ -7,6 +7,7 @@ import { makeEmptyDoc } from '../state'
 import { useCommandStack } from '../hooks/useCommandStack'
 import { invoke } from '../bridge/tauri'
 import { exportToPNG, exportToTXT, downloadFile, downloadText } from '../export/canvasExport'
+import { UpdateNotesCommand, UpdateConnectionsCommand } from '../state/commands'
 
 export function App() {
   const initialDoc: BoardDocument = React.useMemo(() => ({
@@ -164,12 +165,51 @@ export function App() {
           connections={currentDoc.connections}
           document={currentDoc}
           onNotesChange={(notes) => {
-            // TODO: Convert Inspector changes to commands
-            console.warn('Inspector onNotesChange called - needs command integration')
+            // Find what changed and create undo commands
+            const updatedNotes = notes.filter(newNote => {
+              const originalNote = currentDoc.notes.find(n => n.id === newNote.id)
+              return originalNote && JSON.stringify(originalNote) !== JSON.stringify(newNote)
+            })
+
+            if (updatedNotes.length > 0) {
+              const updatedIds = updatedNotes.map(n => n.id)
+              const updates = updatedNotes[0] // Get the updates from first note
+              const originalNote = currentDoc.notes.find(n => n.id === updatedIds[0])!
+
+              // Calculate the updates by comparing properties
+              const calculatedUpdates: Partial<BoardDocument['notes'][0]> = {}
+              if (updates.text !== originalNote.text) calculatedUpdates.text = updates.text
+              if (updates.frame?.x !== originalNote.frame.x) calculatedUpdates.frame = { ...originalNote.frame, x: updates.frame!.x }
+              if (updates.frame?.y !== originalNote.frame.y) calculatedUpdates.frame = { ...originalNote.frame, y: updates.frame!.y }
+              if (updates.frame?.w !== originalNote.frame.w) calculatedUpdates.frame = { ...originalNote.frame, w: updates.frame!.w }
+              if (updates.frame?.h !== originalNote.frame.h) calculatedUpdates.frame = { ...originalNote.frame, h: updates.frame!.h }
+              if (updates.faded !== originalNote.faded) calculatedUpdates.faded = updates.faded
+
+              const previousStates = updatedIds.map(id => currentDoc.notes.find(n => n.id === id)!).filter(Boolean)
+              executeCommand(new UpdateNotesCommand(updatedIds, calculatedUpdates, previousStates))
+            }
           }}
           onConnectionsChange={(connections) => {
-            // TODO: Convert Inspector changes to commands
-            console.warn('Inspector onConnectionsChange called - needs command integration')
+            // Find what changed and create undo commands
+            const updatedConnections = connections.filter(newConn => {
+              const originalConn = currentDoc.connections.find(c => c.id === newConn.id)
+              return originalConn && JSON.stringify(originalConn) !== JSON.stringify(newConn)
+            })
+
+            if (updatedConnections.length > 0) {
+              const updatedIds = updatedConnections.map(c => c.id)
+              const updates = updatedConnections[0] // Get the updates from first connection
+              const originalConnection = currentDoc.connections.find(c => c.id === updatedIds[0])!
+
+              // Calculate the updates by comparing properties
+              const calculatedUpdates: Partial<BoardDocument['connections'][0]> = {}
+              if (JSON.stringify(updates.style) !== JSON.stringify(originalConnection.style)) {
+                calculatedUpdates.style = updates.style
+              }
+
+              const previousStates = updatedIds.map(id => currentDoc.connections.find(c => c.id === id)!).filter(Boolean)
+              executeCommand(new UpdateConnectionsCommand(updatedIds, calculatedUpdates, previousStates))
+            }
           }}
           onDocumentChange={setDocument}
         />

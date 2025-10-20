@@ -14,8 +14,9 @@ Status: **Enhanced MVP with Production Improvements**. Core functionality comple
 
 **Core Interactive Features:**
 - ✅ **Note System**: Double-click creation, Enter/Esc editing, drag movement, resize handles (E/S/SE), Delete key
-- ✅ **Connections**: Alt+drag between notes, visual dotted lines, auto-cleanup on note delete  
+- ✅ **Connections**: Alt+drag between notes, visual dotted lines, auto-cleanup on note delete
 - ✅ **Selection**: Click, Shift+click, marquee selection, Alt+drag subtract mode
+- ✅ **Movement Mode**: M key toggle for continuous arrow key movement at 60 FPS with visual feedback
 - ✅ **Inspector Panel**: Right sidebar with Note/Connection/Document tabs, live property editing
 - ✅ **Navigation**: Mouse wheel zoom, Space+drag pan, cursor feedback, HiDPI support
 - ✅ **File I/O**: Enhanced JSON open/save with native dialogs, schema versioning, recent files
@@ -78,7 +79,7 @@ Status: **Enhanced MVP with Production Improvements**. Core functionality comple
 ### 4) Selection & Movement  
 - SEL-1 [mvp] Click/shift additive selection; marquee subtract — owner: @amp — status: done
 - SEL-2 [mvp] Nudge (1px / 10px with Shift) — owner: @amp — status: done
-- SEL-3 [mvp] Movement mode (M) arrow-keys continuous nudge — owner: unassigned — status: todo
+- SEL-3 [mvp] Movement mode (M) arrow-keys continuous nudge — owner: @amp — status: done
 - SEL-4 [mvp] Shift-constrained drag (H/V) — owner: @amp — status: done (basic drag implemented)
 
 ### 5) Connections
