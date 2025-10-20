@@ -4,11 +4,12 @@ import { Inspector } from './Inspector'
 import { HelpOverlay } from './HelpOverlay'
 import type { BoardDocument } from '../model/types'
 import { makeEmptyDoc } from '../state'
+import { useCommandStack } from '../hooks/useCommandStack'
 import { invoke } from '../bridge/tauri'
 import { exportToPNG, exportToTXT, downloadFile, downloadText } from '../export/canvasExport'
 
 export function App() {
-  const [doc, setDoc] = React.useState<BoardDocument>(() => ({
+  const initialDoc: BoardDocument = React.useMemo(() => ({
     ...makeEmptyDoc(),
     notes: [
       { id: 'n1', text: '✨ Double-click empty space to create notes', frame: { x: 100, y: 100, w: 240, h: 80 } },
@@ -20,14 +21,36 @@ export function App() {
     connections: [
       { id: 'c1', srcNoteId: 'n3', dstNoteId: 'n4', style: { kind: 'dotted', arrows: 'none' } }
     ]
-  }))
+  }), [])
+
+  const {
+    document: doc,
+    executeCommand,
+    undo,
+    redo,
+    setDocument,
+    canUndo,
+    canRedo,
+    undoDescription,
+    redoDescription
+  } = useCommandStack(initialDoc)
+
+  // Temporary state for continuous operations (like dragging)
+  const [tempDoc, setTempDoc] = React.useState<BoardDocument | null>(null)
+  const currentDoc = tempDoc || doc
+
   const [selection, setSelection] = React.useState<string[]>([])
   const [showHelp, setShowHelp] = React.useState(false)
+
+  // Clear temp state when document changes via commands
+  React.useEffect(() => {
+    setTempDoc(null)
+  }, [doc])
 
   const onOpen = async () => {
     try {
       const opened = await invoke<BoardDocument>('open_document')
-      setDoc(opened)
+      setDocument(opened)
     } catch (e) {
       console.warn('Open cancelled or failed', e)
     }
@@ -97,6 +120,13 @@ export function App() {
         <button onClick={onOpen} style={btnStyle}>Open…</button>
         <button onClick={onSave} style={btnStyle}>Save As…</button>
         <div style={{ height: 24, width: 1, background: '#333', margin: '0 4px' }} />
+        <button onClick={undo} disabled={!canUndo} style={{ ...btnStyle, opacity: canUndo ? 1 : 0.5 }} title={`Undo ${undoDescription || ''} (Ctrl+Z)`}>
+          ↶ Undo
+        </button>
+        <button onClick={redo} disabled={!canRedo} style={{ ...btnStyle, opacity: canRedo ? 1 : 0.5 }} title={`Redo ${redoDescription || ''} (Ctrl+Shift+Z)`}>
+          ↷ Redo
+        </button>
+        <div style={{ height: 24, width: 1, background: '#333', margin: '0 4px' }} />
         <button onClick={onExportPNG} style={btnStyle}>Export PNG</button>
         <button onClick={onExportTXT} style={btnStyle}>Export TXT</button>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -108,23 +138,40 @@ export function App() {
       </div>
       <div style={{ flex: 1, display: 'flex' }}>
         <div style={{ flex: 1 }}>
-          <Canvas 
-            notes={doc.notes} 
-            connections={doc.connections}
-            selectedIds={selection} 
+          <Canvas
+            notes={currentDoc.notes}
+            connections={currentDoc.connections}
+            selectedIds={selection}
             onSelectionChange={setSelection}
-            onNotesChange={(notes) => setDoc(prev => ({ ...prev, notes }))}
-            onConnectionsChange={(connections) => setDoc(prev => ({ ...prev, connections }))}
+            onExecuteCommand={executeCommand}
+            onNotesChange={(notes) => {
+              // Update temporary state for continuous operations
+              setTempDoc(prev => prev ? { ...prev, notes } : { ...doc, notes })
+            }}
+            onConnectionsChange={(connections) => {
+              // Update temporary state for continuous operations
+              setTempDoc(prev => prev ? { ...prev, connections } : { ...doc, connections })
+            }}
+            onDragEnd={() => {
+              // When drag ends, clear the temporary state
+              setTempDoc(null)
+            }}
           />
         </div>
         <Inspector
           selectedIds={selection}
-          notes={doc.notes}
-          connections={doc.connections}
-          document={doc}
-          onNotesChange={(notes) => setDoc(prev => ({ ...prev, notes }))}
-          onConnectionsChange={(connections) => setDoc(prev => ({ ...prev, connections }))}
-          onDocumentChange={setDoc}
+          notes={currentDoc.notes}
+          connections={currentDoc.connections}
+          document={currentDoc}
+          onNotesChange={(notes) => {
+            // TODO: Convert Inspector changes to commands
+            console.warn('Inspector onNotesChange called - needs command integration')
+          }}
+          onConnectionsChange={(connections) => {
+            // TODO: Convert Inspector changes to commands
+            console.warn('Inspector onConnectionsChange called - needs command integration')
+          }}
+          onDocumentChange={setDocument}
         />
       </div>
       <HelpOverlay isVisible={showHelp} onClose={() => setShowHelp(false)} />

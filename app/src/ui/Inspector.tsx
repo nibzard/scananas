@@ -87,7 +87,16 @@ export function Inspector({
           />
         )}
         {activeTab === 'connection' && (
-          <ConnectionPanel selectedConnections={selectedConnections} />
+          <ConnectionPanel 
+            selectedConnections={selectedConnections}
+            onUpdate={(updates) => {
+              if (!onConnectionsChange) return
+              const updatedConnections = connections.map(conn => 
+                selectedIds.includes(conn.id) ? { ...conn, ...updates } : conn
+              )
+              onConnectionsChange(updatedConnections)
+            }}
+          />
         )}
         {activeTab === 'document' && (
           <DocumentPanel document={document} onChange={onDocumentChange} />
@@ -222,7 +231,10 @@ function NotePanel({ selectedNotes, onUpdate }: {
   )
 }
 
-function ConnectionPanel({ selectedConnections }: { selectedConnections: Connection[] }) {
+function ConnectionPanel({ selectedConnections, onUpdate }: { 
+  selectedConnections: Connection[]
+  onUpdate?: (updates: Partial<Connection>) => void
+}) {
   if (selectedConnections.length === 0) {
     return (
       <div style={{ opacity: 0.6, fontSize: 14, textAlign: 'center', marginTop: 40 }}>
@@ -231,13 +243,135 @@ function ConnectionPanel({ selectedConnections }: { selectedConnections: Connect
     )
   }
 
+  const firstConnection = selectedConnections[0]
+  const isMultiple = selectedConnections.length > 1
+  const style = firstConnection.style || {}
+
+  const updateStyle = (styleUpdates: Partial<Connection['style']>) => {
+    if (!onUpdate) return
+    onUpdate({
+      style: { ...style, ...styleUpdates }
+    })
+  }
+
   return (
-    <div>
-      <div style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 16 }}>
-        {selectedConnections.length === 1 ? 'Connection Properties' : `${selectedConnections.length} connections selected`}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 8 }}>
+        {isMultiple ? `${selectedConnections.length} connections selected` : 'Connection Properties'}
       </div>
-      <div style={{ opacity: 0.6, fontSize: 12 }}>
-        Connection editing coming soon...
+
+      {/* Line Style */}
+      <div>
+        <label style={{ display: 'block', fontSize: 12, marginBottom: 8, color: '#ccc' }}>
+          Line Style
+        </label>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <button
+            onClick={() => updateStyle({ kind: 'solid' })}
+            style={{
+              ...buttonStyle,
+              background: (style.kind || 'solid') === 'solid' ? '#4aa3ff' : '#333'
+            }}
+          >
+            Solid
+          </button>
+          <button
+            onClick={() => updateStyle({ kind: 'dotted' })}
+            style={{
+              ...buttonStyle,
+              background: style.kind === 'dotted' ? '#4aa3ff' : '#333'
+            }}
+          >
+            Dotted
+          </button>
+        </div>
+      </div>
+
+      {/* Arrows */}
+      <div>
+        <label style={{ display: 'block', fontSize: 12, marginBottom: 8, color: '#ccc' }}>
+          Arrows
+        </label>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+          <button
+            onClick={() => updateStyle({ arrows: 'none' })}
+            style={{
+              ...smallButtonStyle,
+              background: (style.arrows || 'none') === 'none' ? '#4aa3ff' : '#333'
+            }}
+          >
+            None
+          </button>
+          <button
+            onClick={() => updateStyle({ arrows: 'dst' })}
+            style={{
+              ...smallButtonStyle,
+              background: style.arrows === 'dst' ? '#4aa3ff' : '#333'
+            }}
+          >
+            End →
+          </button>
+          <button
+            onClick={() => updateStyle({ arrows: 'src' })}
+            style={{
+              ...smallButtonStyle,
+              background: style.arrows === 'src' ? '#4aa3ff' : '#333'
+            }}
+          >
+            ← Start
+          </button>
+          <button
+            onClick={() => updateStyle({ arrows: 'both' })}
+            style={{
+              ...smallButtonStyle,
+              background: style.arrows === 'both' ? '#4aa3ff' : '#333'
+            }}
+          >
+            ↔ Both
+          </button>
+        </div>
+      </div>
+
+      {/* Color */}
+      <div>
+        <label style={{ display: 'block', fontSize: 12, marginBottom: 8, color: '#ccc' }}>
+          Color
+        </label>
+        <input
+          type="color"
+          value={style.color || '#ffffff'}
+          onChange={(e) => updateStyle({ color: e.target.value })}
+          style={{
+            width: '100%',
+            height: 32,
+            padding: 0,
+            border: '1px solid #555',
+            borderRadius: 4,
+            background: 'transparent',
+            cursor: 'pointer'
+          }}
+        />
+      </div>
+
+      {/* Width */}
+      <div>
+        <label style={{ display: 'block', fontSize: 12, marginBottom: 8, color: '#ccc' }}>
+          Line Width
+        </label>
+        <input
+          type="range"
+          min="1"
+          max="10"
+          value={style.width || 2}
+          onChange={(e) => updateStyle({ width: parseInt(e.target.value) })}
+          style={{
+            width: '100%',
+            marginBottom: 4
+          }}
+        />
+        <div style={{ fontSize: 11, color: '#999', textAlign: 'center' }}>
+          {style.width || 2}px
+        </div>
       </div>
     </div>
   )
@@ -285,4 +419,24 @@ const inputStyle: React.CSSProperties = {
   borderRadius: 2,
   color: '#fff',
   fontSize: 11
+}
+
+const buttonStyle: React.CSSProperties = {
+  padding: '6px 8px',
+  border: 'none',
+  borderRadius: 4,
+  color: '#fff',
+  fontSize: 11,
+  cursor: 'pointer',
+  transition: 'background-color 0.2s'
+}
+
+const smallButtonStyle: React.CSSProperties = {
+  padding: '4px 6px',
+  border: 'none',
+  borderRadius: 3,
+  color: '#fff',
+  fontSize: 10,
+  cursor: 'pointer',
+  transition: 'background-color 0.2s'
 }

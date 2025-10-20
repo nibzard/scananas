@@ -1,13 +1,26 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import type { Note, Rect, Point, Connection } from '../../model/types'
+import type { Command } from '../../state/commands'
+import {
+  CreateNotesCommand,
+  DeleteNotesCommand,
+  MoveNotesCommand,
+  EditNoteTextCommand,
+  ResizeNoteCommand,
+  CreateConnectionCommand,
+  DeleteConnectionCommand
+} from '../../state/commands'
 
 type Props = {
   notes: Note[]
   connections?: Connection[]
   selectedIds?: string[]
   onSelectionChange?: (ids: string[]) => void
+  onExecuteCommand?: (command: Command) => void
+  // For continuous operations like dragging
   onNotesChange?: (notes: Note[]) => void
   onConnectionsChange?: (connections: Connection[]) => void
+  onDragEnd?: () => void
   background?: string
 }
 
@@ -31,7 +44,7 @@ function rectToScreen(t: Transform, r: Rect) {
   return { x: topLeft.x, y: topLeft.y, w: r.w * t.scale, h: r.h * t.scale }
 }
 
-export function Canvas({ notes, connections = [], selectedIds = [], onSelectionChange, onNotesChange, onConnectionsChange, background = '#202124' }: Props) {
+export function Canvas({ notes, connections = [], selectedIds = [], onSelectionChange, onExecuteCommand, onNotesChange, onConnectionsChange, onDragEnd, background = '#202124' }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const [transform, setTransform] = useState<Transform>({ scale: 1, tx: 0, ty: 0 })
   const [panning, setPanning] = useState(false)
@@ -52,8 +65,11 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
   const lastClickTime = useRef<number>(0)
   const lastClickPos = useRef<Point>({ x: 0, y: 0 })
 
+  // For undo/redo support during continuous operations
+  const initialNoteStates = useRef<Map<string, Note> | null>(null)
+
   const createNote = (worldPos: Point, text: string = 'New note') => {
-    if (!onNotesChange) return
+    if (!onExecuteCommand) return
     const newNote: Note = {
       id: `note_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
       text,
@@ -64,7 +80,7 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
         h: 80
       }
     }
-    onNotesChange([...notes, newNote])
+    onExecuteCommand(new CreateNotesCommand([newNote]))
     onSelectionChange?.([newNote.id])
   }
 
@@ -76,39 +92,34 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
   }
 
   const finishEditing = (save: boolean = true) => {
-    if (!editing || !onNotesChange) return
-    
-    if (save) {
-      const updatedNotes = notes.map(note => 
-        note.id === editing.noteId ? { ...note, text: editing.text } : note
-      )
-      onNotesChange(updatedNotes)
+    if (!editing) return
+
+    if (save && onExecuteCommand) {
+      const note = notes.find(n => n.id === editing.noteId)
+      if (note && note.text !== editing.text) {
+        onExecuteCommand(new EditNoteTextCommand(editing.noteId, note.text, editing.text))
+      }
     }
     setEditing(null)
   }
 
   const deleteSelectedNotes = () => {
-    if (selectedIds.length === 0 || !onNotesChange) return
-    
-    const remainingNotes = notes.filter(note => !selectedIds.includes(note.id))
-    onNotesChange(remainingNotes)
-    
-    // Also remove connections involving deleted notes
-    if (onConnectionsChange) {
-      const remainingConnections = connections.filter(conn => 
-        !selectedIds.includes(conn.srcNoteId) && !selectedIds.includes(conn.dstNoteId)
-      )
-      onConnectionsChange(remainingConnections)
-    }
-    
+    if (selectedIds.length === 0 || !onExecuteCommand) return
+
+    const deletedNotes = notes.filter(note => selectedIds.includes(note.id))
+    const deletedConnections = connections.filter(conn =>
+      selectedIds.includes(conn.srcNoteId) || selectedIds.includes(conn.dstNoteId)
+    )
+
+    onExecuteCommand(new DeleteNotesCommand(deletedNotes, deletedConnections))
     onSelectionChange?.([])
   }
 
   const createConnection = (srcNoteId: string, dstNoteId: string) => {
-    if (!onConnectionsChange || srcNoteId === dstNoteId) return
-    
+    if (!onExecuteCommand || srcNoteId === dstNoteId) return
+
     // Check if connection already exists
-    const exists = connections.some(c => 
+    const exists = connections.some(c =>
       (c.srcNoteId === srcNoteId && c.dstNoteId === dstNoteId) ||
       (c.srcNoteId === dstNoteId && c.dstNoteId === srcNoteId)
     )
@@ -120,7 +131,7 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
       dstNoteId,
       style: { kind: 'dotted', arrows: 'none' }
     }
-    onConnectionsChange([...connections, newConnection])
+    onExecuteCommand(new CreateConnectionCommand(newConnection))
   }
 
   // Handle HiDPI
@@ -155,21 +166,20 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
         e.preventDefault()
         const nudgeDistance = e.shiftKey ? 10 : 1
         let dx = 0, dy = 0
-        
+
         switch (e.code) {
           case 'ArrowLeft': dx = -nudgeDistance; break
           case 'ArrowRight': dx = nudgeDistance; break
           case 'ArrowUp': dy = -nudgeDistance; break
           case 'ArrowDown': dy = nudgeDistance; break
         }
-        
-        if (onNotesChange) {
-          const updatedNotes = notes.map(note => 
-            selectedIds.includes(note.id) 
-              ? { ...note, frame: { ...note.frame, x: note.frame.x + dx, y: note.frame.y + dy } }
-              : note
-          )
-          onNotesChange(updatedNotes)
+
+        if (onExecuteCommand) {
+          const movements = new Map<string, { dx: number; dy: number }>()
+          selectedIds.forEach(id => {
+            movements.set(id, { dx, dy })
+          })
+          onExecuteCommand(new MoveNotesCommand(movements))
         }
         return
       }
@@ -233,15 +243,61 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
       const srcScreen = applyTransform(transform, srcCenter)
       const dstScreen = applyTransform(transform, dstCenter)
 
-      ctx.strokeStyle = conn.style?.color || 'rgba(255,255,255,0.6)'
-      ctx.lineWidth = (conn.style?.width || 2) * transform.scale
+      const color = conn.style?.color || 'rgba(255,255,255,0.6)'
+      const lineWidth = (conn.style?.width || 2) * transform.scale
+      
+      ctx.strokeStyle = color
+      ctx.fillStyle = color
+      ctx.lineWidth = lineWidth
       ctx.setLineDash(conn.style?.kind === 'dotted' ? [5, 5] : [])
       
+      // Draw the line
       ctx.beginPath()
       ctx.moveTo(srcScreen.x, srcScreen.y)
       ctx.lineTo(dstScreen.x, dstScreen.y)
       ctx.stroke()
       ctx.setLineDash([])
+      
+      // Draw arrows if specified
+      const arrows = conn.style?.arrows || 'none'
+      if (arrows !== 'none') {
+        const arrowSize = Math.max(8, lineWidth * 2)
+        const dx = dstScreen.x - srcScreen.x
+        const dy = dstScreen.y - srcScreen.y
+        const length = Math.sqrt(dx * dx + dy * dy)
+        const unitX = dx / length
+        const unitY = dy / length
+        
+        if (arrows === 'dst' || arrows === 'both') {
+          // Arrow at destination
+          const arrowX = dstScreen.x - unitX * arrowSize
+          const arrowY = dstScreen.y - unitY * arrowSize
+          const perpX = -unitY * arrowSize * 0.5
+          const perpY = unitX * arrowSize * 0.5
+          
+          ctx.beginPath()
+          ctx.moveTo(dstScreen.x, dstScreen.y)
+          ctx.lineTo(arrowX + perpX, arrowY + perpY)
+          ctx.lineTo(arrowX - perpX, arrowY - perpY)
+          ctx.closePath()
+          ctx.fill()
+        }
+        
+        if (arrows === 'src' || arrows === 'both') {
+          // Arrow at source
+          const arrowX = srcScreen.x + unitX * arrowSize
+          const arrowY = srcScreen.y + unitY * arrowSize
+          const perpX = -unitY * arrowSize * 0.5
+          const perpY = unitX * arrowSize * 0.5
+          
+          ctx.beginPath()
+          ctx.moveTo(srcScreen.x, srcScreen.y)
+          ctx.lineTo(arrowX + perpX, arrowY + perpY)
+          ctx.lineTo(arrowX - perpX, arrowY - perpY)
+          ctx.closePath()
+          ctx.fill()
+        }
+      }
     }
 
     // draw notes
@@ -393,14 +449,14 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
           const note = notes.find(n => n.id === id)
           if (note) startFrames.set(id, { ...note.frame })
         })
-        
+
         const dragType = e.altKey ? 'connect' : 'move'
-        setDragging({ 
-          type: dragType, 
-          noteIds: dragIds, 
-          startWorld: world, 
+        setDragging({
+          type: dragType,
+          noteIds: dragIds,
+          startWorld: world,
           startFrames,
-          sourceNoteId: dragType === 'connect' ? hit.id : undefined 
+          sourceNoteId: dragType === 'connect' ? hit.id : undefined
         })
       } else {
         setMarquee({ start: pos, end: pos, subtract: e.altKey })
@@ -517,7 +573,12 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
       }
       
       setDragging(null)
-      
+
+      // Call onDragEnd when dragging operations complete
+      if (onDragEnd && (dragging?.type === 'move' || dragging?.type === 'resize')) {
+        onDragEnd()
+      }
+
       if (marquee) {
         const rect = toRect(marquee.start, marquee.end)
         const worldRect = screenRectToWorld(transform, rect)
