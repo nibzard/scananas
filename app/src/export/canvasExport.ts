@@ -157,28 +157,75 @@ function renderNote(ctx: CanvasRenderingContext2D, note: Note) {
 function renderConnection(ctx: CanvasRenderingContext2D, connection: Connection, notes: Note[]) {
   const srcNote = notes.find(n => n.id === connection.srcNoteId)
   const dstNote = notes.find(n => n.id === connection.dstNoteId)
-  
+
   if (!srcNote || !dstNote) return
-  
+
   // Calculate center points
   const srcX = srcNote.frame.x + srcNote.frame.w / 2
   const srcY = srcNote.frame.y + srcNote.frame.h / 2
   const dstX = dstNote.frame.x + dstNote.frame.w / 2
   const dstY = dstNote.frame.y + dstNote.frame.h / 2
-  
+
+  const color = connection.style?.color || 'rgba(255,255,255,0.6)'
+  const lineWidth = connection.style?.width || 2
+
   ctx.save()
-  ctx.strokeStyle = connection.style?.color || 'rgba(255,255,255,0.6)'
-  ctx.lineWidth = connection.style?.width || 2
-  
+  ctx.strokeStyle = color
+  ctx.fillStyle = color
+  ctx.lineWidth = lineWidth
+
   if (connection.style?.kind === 'dotted') {
     ctx.setLineDash([5, 5])
   }
-  
+
+  // Draw the line
   ctx.beginPath()
   ctx.moveTo(srcX, srcY)
   ctx.lineTo(dstX, dstY)
   ctx.stroke()
-  
+  ctx.setLineDash([])
+
+  // Draw arrows if specified
+  const arrows = connection.style?.arrows || 'none'
+  if (arrows !== 'none') {
+    const arrowSize = Math.max(8, lineWidth * 2)
+    const dx = dstX - srcX
+    const dy = dstY - srcY
+    const length = Math.sqrt(dx * dx + dy * dy)
+    const unitX = dx / length
+    const unitY = dy / length
+
+    if (arrows === 'dst' || arrows === 'both') {
+      // Arrow at destination
+      const arrowX = dstX - unitX * arrowSize
+      const arrowY = dstY - unitY * arrowSize
+      const perpX = -unitY * arrowSize * 0.5
+      const perpY = unitX * arrowSize * 0.5
+
+      ctx.beginPath()
+      ctx.moveTo(dstX, dstY)
+      ctx.lineTo(arrowX + perpX, arrowY + perpY)
+      ctx.lineTo(arrowX - perpX, arrowY - perpY)
+      ctx.closePath()
+      ctx.fill()
+    }
+
+    if (arrows === 'src' || arrows === 'both') {
+      // Arrow at source
+      const arrowX = srcX + unitX * arrowSize
+      const arrowY = srcY + unitY * arrowSize
+      const perpX = -unitY * arrowSize * 0.5
+      const perpY = unitX * arrowSize * 0.5
+
+      ctx.beginPath()
+      ctx.moveTo(srcX, srcY)
+      ctx.lineTo(arrowX + perpX, arrowY + perpY)
+      ctx.lineTo(arrowX - perpX, arrowY - perpY)
+      ctx.closePath()
+      ctx.fill()
+    }
+  }
+
   ctx.restore()
 }
 

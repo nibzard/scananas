@@ -42,6 +42,12 @@ Status: **Enhanced MVP with Production Improvements**. Core functionality comple
 - ✅ **Typed Interfaces**: Full TypeScript interfaces for recent files operations
 - ✅ **Clear Functionality**: User-friendly clear recent files option
 
+**Container Format & Advanced Features:**
+- ✅ **FIM Container Format**: Complete .fim zip container implementation with board.json + /media structure
+- ✅ **Format Flexibility**: Dual support for both .fim (zip) and .json formats with automatic detection
+- ✅ **Zip Integration**: Rust zip crate integration for container creation and extraction
+- ✅ **Media Support**: Ready for embedded media files with dedicated /media directory
+
 ## Conventions
 
 - Status: use `todo | in-progress | blocked | review | done`.
@@ -69,8 +75,8 @@ Status: **Enhanced MVP with Production Improvements**. Core functionality comple
 - DM-2.6 [mvp] Enhanced error handling and schema validation — owner: @amp — status: done
 - DM-2.7 [mvp] Recent files state management (10 most recent) — owner: @amp — status: done
 - DM-2.8 [mvp] Last save path tracking and persistence — owner: @amp — status: done
-- DM-3 [mvp] `.fim` zip container I/O (board.json + /media) — owner: unassigned — status: todo
-- DM-4 [mvp] Autosave every 30s + idle; recovery `.fim.recovery` — owner: unassigned — status: todo
+- DM-3 [mvp] `.fim` zip container I/O (board.json + /media) — owner: @amp — status: done
+- DM-4 [mvp] Autosave every 30s + idle; recovery `.fim.recovery` — owner: unassigned — status: done (completed 2025-10-20) ✅ **COMPLETED**: Implemented automatic saving system with 30-second intervals, idle detection, and recovery file generation (.fim.recovery) for crash recovery
 
 ### 2) Canvas, Rendering, Hit‑Testing
 - CAN-1 [mvp] Render infinite canvas (zoom/pan) with Canvas2D/WebGL — owner: @amp — status: done
