@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import type { Note, Connection, BoardDocument } from '../model/types'
+import { hasMarkdownSyntax } from '../utils/markdown'
 
 interface InspectorProps {
   selectedIds: string[]
@@ -150,6 +151,46 @@ function NotePanel({ selectedNotes, onUpdate }: {
               resize: 'vertical'
             }}
           />
+
+          {/* Markdown Toggle */}
+          <div style={{ marginTop: 8 }}>
+            <label style={{ display: 'flex', alignItems: 'center', fontSize: 12, color: '#ccc', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={firstNote.richAttrs?.markdownEnabled || false}
+                onChange={(e) => onUpdate({
+                  richAttrs: {
+                    ...firstNote.richAttrs,
+                    markdownEnabled: e.target.checked
+                  }
+                })}
+                style={{ marginRight: 8 }}
+              />
+              Enable Markdown Formatting
+            </label>
+            {firstNote.richAttrs?.markdownEnabled && (
+              <div style={{
+                marginTop: 8,
+                fontSize: 11,
+                color: '#999',
+                background: '#2a2a2a',
+                padding: 8,
+                borderRadius: 4,
+                border: '1px solid #444'
+              }}>
+                <div style={{ marginBottom: 4, fontWeight: 'bold' }}>Markdown syntax:</div>
+                <div>• **bold** → <strong>bold</strong></div>
+                <div>• *italic* → <em>italic</em></div>
+                <div>• `code` → <code>code</code></div>
+                <div>• ~~strikethrough~~ → <s>strikethrough</s></div>
+                {hasMarkdownSyntax(firstNote.text) && (
+                  <div style={{ marginTop: 8, color: '#4aa3ff' }}>
+                    ✓ Markdown detected in text
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

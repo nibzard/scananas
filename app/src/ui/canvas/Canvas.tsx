@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import type { Note, Rect, Point, Connection } from '../../model/types'
 import type { Command } from '../../state/commands'
+import { parseMarkdown, type MarkdownSegment } from '../../utils/markdown'
 import {
   CreateNotesCommand,
   DeleteNotesCommand,
@@ -547,11 +548,16 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
       ctx.stroke()
 
       // text
-      ctx.fillStyle = '#202124'
-      ctx.font = `${14 * transform.scale}px -apple-system, system-ui, sans-serif`
-      ctx.textBaseline = 'top'
       const pad = 8 * transform.scale
-      wrapText(ctx, n.text, r.x + pad, r.y + pad, r.w - 2 * pad, 18 * transform.scale)
+      renderMarkdownText(
+        ctx,
+        n,
+        r.x + pad,
+        r.y + pad,
+        r.w - 2 * pad,
+        18 * transform.scale,
+        transform.scale
+      )
     }
 
     // Draw resize handles for selected notes (only if single selection)
@@ -1051,6 +1057,134 @@ function wrapText(
     }
   }
   if (line) ctx.fillText(line, x, yy)
+}
+
+function renderMarkdownText(
+  ctx: CanvasRenderingContext2D,
+  note: Note,
+  x: number,
+  y: number,
+  maxWidth: number,
+  lineHeight: number,
+  scale: number,
+) {
+  const baseFontSize = 14 * scale
+  const baseFont = `${baseFontSize}px -apple-system, system-ui, sans-serif`
+
+  // Check if markdown is enabled for this note
+  const markdownEnabled = note.richAttrs?.markdownEnabled || false
+
+  if (!markdownEnabled) {
+    // Use plain text rendering
+    ctx.fillStyle = '#202124'
+    ctx.font = baseFont
+    ctx.textBaseline = 'top'
+    wrapText(ctx, note.text, x, y, maxWidth, lineHeight)
+    return
+  }
+
+  // Parse markdown
+  const { segments, hasMarkdown } = parseMarkdown(note.text)
+
+  // If no markdown found, render as plain text
+  if (!hasMarkdown) {
+    ctx.fillStyle = '#202124'
+    ctx.font = baseFont
+    ctx.textBaseline = 'top'
+    wrapText(ctx, note.text, x, y, maxWidth, lineHeight)
+    return
+  }
+
+  // Render markdown segments
+  ctx.textBaseline = 'top'
+  let currentX = x
+  let currentY = y
+  let currentLineHeight = lineHeight
+  let currentLineSegments: Array<{ text: string; font: string; fillStyle: string }> = []
+
+  // Function to render the current line
+  const renderCurrentLine = () => {
+    if (currentLineSegments.length === 0) return
+
+    // Calculate total width of the line
+    const totalWidth = currentLineSegments.reduce((sum, seg) => {
+      ctx.font = seg.font
+      return sum + ctx.measureText(seg.text).width
+    }, 0)
+
+    // Render each segment
+    let segX = currentX
+    for (const segment of currentLineSegments) {
+      ctx.font = segment.font
+      ctx.fillStyle = segment.fillStyle
+      ctx.fillText(segment.text, segX, currentY)
+      segX += ctx.measureText(segment.text).width
+    }
+
+    currentY += currentLineHeight
+    currentLineSegments = []
+    currentX = x
+  }
+
+  // Process each segment
+  for (const segment of segments) {
+    if (segment.text === '') continue
+
+    // Apply styling
+    let font = baseFont
+    let fillStyle = '#202124'
+
+    if (segment.bold) {
+      font = `bold ${baseFont}`
+    }
+    if (segment.italic) {
+      font = `italic ${font}`
+    }
+    if (segment.code) {
+      font = `${baseFontSize}px 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace`
+      fillStyle = '#d73a49'
+      // Add background for code
+      ctx.fillStyle = 'rgba(255, 235, 59, 0.2)' // Light yellow background
+    }
+    if (segment.strike) {
+      // We'll add strikethrough after rendering the text
+    }
+
+    // Split text into words for line wrapping
+    const words = segment.text.split(/\s+/)
+
+    for (let i = 0; i < words.length; i++) {
+      const word = i === 0 ? words[i] : ` ${words[i]}`
+
+      // Test if word fits on current line
+      ctx.font = font
+      const testWidth = ctx.measureText(word).width
+
+      // Check if adding this word would exceed maxWidth
+      let currentLineWidth = 0
+      if (currentLineSegments.length > 0) {
+        for (const seg of currentLineSegments) {
+          ctx.font = seg.font
+          currentLineWidth += ctx.measureText(seg.text).width
+        }
+      }
+
+      if (currentLineWidth + testWidth > maxWidth && currentLineSegments.length > 0) {
+        // Render current line and start new line
+        renderCurrentLine()
+      }
+
+      // Add word to current line
+      currentLineSegments.push({
+        text: word,
+        font,
+        fillStyle
+      })
+    }
+  }
+
+  // Render any remaining segments
+  renderCurrentLine()
 }
 
 function hitTest(notes: Note[], pWorld: Point): Note | null {
