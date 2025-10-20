@@ -1,10 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import type { Note, Rect, Point } from '../../model/types'
+import type { Note, Rect, Point, Connection } from '../../model/types'
 
 type Props = {
   notes: Note[]
+  connections?: Connection[]
   selectedIds?: string[]
   onSelectionChange?: (ids: string[]) => void
+  onNotesChange?: (notes: Note[]) => void
+  onConnectionsChange?: (connections: Connection[]) => void
   background?: string
 }
 
@@ -28,7 +31,7 @@ function rectToScreen(t: Transform, r: Rect) {
   return { x: topLeft.x, y: topLeft.y, w: r.w * t.scale, h: r.h * t.scale }
 }
 
-export function Canvas({ notes, selectedIds = [], onSelectionChange, background = '#202124' }: Props) {
+export function Canvas({ notes, connections = [], selectedIds = [], onSelectionChange, onNotesChange, onConnectionsChange, background = '#202124' }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const [transform, setTransform] = useState<Transform>({ scale: 1, tx: 0, ty: 0 })
   const [panning, setPanning] = useState(false)
@@ -36,6 +39,87 @@ export function Canvas({ notes, selectedIds = [], onSelectionChange, background 
   const panStart = useRef<Point | null>(null)
   const panStartTxTy = useRef<{ tx: number; ty: number }>({ tx: 0, ty: 0 })
   const [marquee, setMarquee] = useState<null | { start: Point; end: Point; subtract: boolean }>(null)
+  const [dragging, setDragging] = useState<{ 
+    type: 'move' | 'connect', 
+    noteIds: string[], 
+    startWorld: Point, 
+    startFrames: Map<string, Rect>,
+    sourceNoteId?: string
+  } | null>(null)
+  const [editing, setEditing] = useState<{ noteId: string, text: string } | null>(null)
+  const lastClickTime = useRef<number>(0)
+  const lastClickPos = useRef<Point>({ x: 0, y: 0 })
+
+  const createNote = (worldPos: Point, text: string = 'New note') => {
+    if (!onNotesChange) return
+    const newNote: Note = {
+      id: `note_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+      text,
+      frame: {
+        x: worldPos.x,
+        y: worldPos.y,
+        w: 200,
+        h: 80
+      }
+    }
+    onNotesChange([...notes, newNote])
+    onSelectionChange?.([newNote.id])
+  }
+
+  const startEditing = (noteId: string) => {
+    const note = notes.find(n => n.id === noteId)
+    if (note) {
+      setEditing({ noteId, text: note.text })
+    }
+  }
+
+  const finishEditing = (save: boolean = true) => {
+    if (!editing || !onNotesChange) return
+    
+    if (save) {
+      const updatedNotes = notes.map(note => 
+        note.id === editing.noteId ? { ...note, text: editing.text } : note
+      )
+      onNotesChange(updatedNotes)
+    }
+    setEditing(null)
+  }
+
+  const deleteSelectedNotes = () => {
+    if (selectedIds.length === 0 || !onNotesChange) return
+    
+    const remainingNotes = notes.filter(note => !selectedIds.includes(note.id))
+    onNotesChange(remainingNotes)
+    
+    // Also remove connections involving deleted notes
+    if (onConnectionsChange) {
+      const remainingConnections = connections.filter(conn => 
+        !selectedIds.includes(conn.srcNoteId) && !selectedIds.includes(conn.dstNoteId)
+      )
+      onConnectionsChange(remainingConnections)
+    }
+    
+    onSelectionChange?.([])
+  }
+
+  const createConnection = (srcNoteId: string, dstNoteId: string) => {
+    if (!onConnectionsChange || srcNoteId === dstNoteId) return
+    
+    // Check if connection already exists
+    const exists = connections.some(c => 
+      (c.srcNoteId === srcNoteId && c.dstNoteId === dstNoteId) ||
+      (c.srcNoteId === dstNoteId && c.dstNoteId === srcNoteId)
+    )
+    if (exists) return
+
+    const newConnection: Connection = {
+      id: `conn_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+      srcNoteId,
+      dstNoteId,
+      style: { kind: 'dotted', arrows: 'none' }
+    }
+    onConnectionsChange([...connections, newConnection])
+  }
 
   // Handle HiDPI
   const resize = () => {
@@ -53,7 +137,25 @@ export function Canvas({ notes, selectedIds = [], onSelectionChange, background 
   useEffect(() => {
     resize()
     window.addEventListener('resize', resize)
-    const onKeyDown = (e: KeyboardEvent) => { if (e.code === 'Space') setSpacePan(true) }
+    const onKeyDown = (e: KeyboardEvent) => { 
+      if (e.code === 'Space') setSpacePan(true)
+      if (e.code === 'Enter' && !editing && selectedIds.length === 1) {
+        e.preventDefault()
+        startEditing(selectedIds[0])
+      }
+      if (e.code === 'Escape' && editing) {
+        e.preventDefault()
+        finishEditing(false)
+      }
+      if (e.code === 'Enter' && editing) {
+        e.preventDefault()
+        finishEditing(true)
+      }
+      if ((e.code === 'Delete' || e.code === 'Backspace') && !editing && selectedIds.length > 0) {
+        e.preventDefault()
+        deleteSelectedNotes()
+      }
+    }
     const onKeyUp = (e: KeyboardEvent) => { if (e.code === 'Space') setSpacePan(false) }
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('keyup', onKeyUp)
@@ -77,6 +179,35 @@ export function Canvas({ notes, selectedIds = [], onSelectionChange, background 
     ctx.fillStyle = background
     ctx.fillRect(0, 0, width, height)
     ctx.restore()
+
+    // draw connections
+    for (const conn of connections) {
+      const srcNote = notes.find(n => n.id === conn.srcNoteId)
+      const dstNote = notes.find(n => n.id === conn.dstNoteId)
+      if (!srcNote || !dstNote) continue
+
+      const srcCenter = {
+        x: srcNote.frame.x + srcNote.frame.w / 2,
+        y: srcNote.frame.y + srcNote.frame.h / 2
+      }
+      const dstCenter = {
+        x: dstNote.frame.x + dstNote.frame.w / 2,
+        y: dstNote.frame.y + dstNote.frame.h / 2
+      }
+      
+      const srcScreen = applyTransform(transform, srcCenter)
+      const dstScreen = applyTransform(transform, dstCenter)
+
+      ctx.strokeStyle = conn.style?.color || 'rgba(255,255,255,0.6)'
+      ctx.lineWidth = (conn.style?.width || 2) * transform.scale
+      ctx.setLineDash(conn.style?.kind === 'dotted' ? [5, 5] : [])
+      
+      ctx.beginPath()
+      ctx.moveTo(srcScreen.x, srcScreen.y)
+      ctx.lineTo(dstScreen.x, dstScreen.y)
+      ctx.stroke()
+      ctx.setLineDash([])
+    }
 
     // draw notes
     for (const n of notes) {
@@ -103,7 +234,7 @@ export function Canvas({ notes, selectedIds = [], onSelectionChange, background 
   useEffect(() => {
     draw()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notes, transform])
+  }, [notes, connections, transform])
 
   // Mouse interactions
   useEffect(() => {
@@ -134,15 +265,61 @@ export function Canvas({ notes, selectedIds = [], onSelectionChange, background 
         return
       }
       if (e.button !== 0) return
+
+      // Double-click detection
+      const now = Date.now()
+      const timeSinceLastClick = now - lastClickTime.current
+      const distFromLastClick = Math.sqrt(
+        Math.pow(pos.x - lastClickPos.current.x, 2) + 
+        Math.pow(pos.y - lastClickPos.current.y, 2)
+      )
+      
       const hit = hitTest(notes, world)
+      if (!hit && timeSinceLastClick < 500 && distFromLastClick < 10) {
+        // Double-click on empty area - create note
+        createNote(world)
+        lastClickTime.current = 0 // Reset to prevent triple-click issues
+        return
+      }
+
+      lastClickTime.current = now
+      lastClickPos.current = pos
+
       if (hit) {
-        if (e.shiftKey) {
-          const set = new Set(selectedIds)
-          set.add(hit.id)
-          onSelectionChange?.(Array.from(set))
+        // Determine what to select/drag
+        let dragIds: string[]
+        if (selectedIds.includes(hit.id)) {
+          // Clicked on already selected note - drag all selected
+          dragIds = [...selectedIds]
         } else {
-          onSelectionChange?.([hit.id])
+          // Clicked on unselected note
+          if (e.shiftKey) {
+            const set = new Set(selectedIds)
+            set.add(hit.id)
+            const newSelection = Array.from(set)
+            onSelectionChange?.(newSelection)
+            dragIds = [hit.id] // Only drag the newly selected note
+          } else {
+            onSelectionChange?.([hit.id])
+            dragIds = [hit.id]
+          }
         }
+
+        // Start dragging
+        const startFrames = new Map<string, Rect>()
+        dragIds.forEach(id => {
+          const note = notes.find(n => n.id === id)
+          if (note) startFrames.set(id, { ...note.frame })
+        })
+        
+        const dragType = e.altKey ? 'connect' : 'move'
+        setDragging({ 
+          type: dragType, 
+          noteIds: dragIds, 
+          startWorld: world, 
+          startFrames,
+          sourceNoteId: dragType === 'connect' ? hit.id : undefined 
+        })
       } else {
         setMarquee({ start: pos, end: pos, subtract: e.altKey })
       }
@@ -150,17 +327,60 @@ export function Canvas({ notes, selectedIds = [], onSelectionChange, background 
     const onMove = (e: MouseEvent) => {
       const rect = c.getBoundingClientRect()
       const curr = { x: e.clientX - rect.left, y: e.clientY - rect.top }
+      const currWorld = invTransform(transform, curr)
+      
       if (panning && panStart.current) {
         const dx = curr.x - panStart.current.x
         const dy = curr.y - panStart.current.y
         setTransform(t => ({ ...t, tx: panStartTxTy.current.tx + dx, ty: panStartTxTy.current.ty + dy }))
       }
+      
+      if (dragging && onNotesChange && dragging.type === 'move') {
+        const dx = currWorld.x - dragging.startWorld.x
+        const dy = currWorld.y - dragging.startWorld.y
+        
+        const updatedNotes = notes.map(note => {
+          if (dragging.noteIds.includes(note.id)) {
+            const startFrame = dragging.startFrames.get(note.id)
+            if (startFrame) {
+              return {
+                ...note,
+                frame: {
+                  ...startFrame,
+                  x: startFrame.x + dx,
+                  y: startFrame.y + dy
+                }
+              }
+            }
+          }
+          return note
+        })
+        onNotesChange(updatedNotes)
+      }
+      
       if (marquee) {
         setMarquee({ ...marquee, end: curr })
       }
     }
-    const onUp = () => {
+    const onUp = (e: MouseEvent) => {
       setPanning(false)
+      
+      // Handle connection creation
+      if (dragging?.type === 'connect' && dragging.sourceNoteId) {
+        const rect = canvasRef.current?.getBoundingClientRect()
+        if (rect) {
+          const pos = { x: e.clientX - rect.left, y: e.clientY - rect.top }
+          const world = invTransform(transform, pos)
+          const targetNote = hitTest(notes, world)
+          
+          if (targetNote && targetNote.id !== dragging.sourceNoteId) {
+            createConnection(dragging.sourceNoteId, targetNote.id)
+          }
+        }
+      }
+      
+      setDragging(null)
+      
       if (marquee) {
         const rect = toRect(marquee.start, marquee.end)
         const worldRect = screenRectToWorld(transform, rect)
@@ -184,7 +404,7 @@ export function Canvas({ notes, selectedIds = [], onSelectionChange, background 
       window.removeEventListener('mouseup', onUp)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [panning, transform])
+  }, [panning, dragging, editing, transform, notes, connections, selectedIds, onNotesChange, onSelectionChange, onConnectionsChange])
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}>
@@ -203,6 +423,34 @@ export function Canvas({ notes, selectedIds = [], onSelectionChange, background 
           }}
         />
       )}
+      {editing && (() => {
+        const note = notes.find(n => n.id === editing.noteId)
+        if (!note) return null
+        const screenRect = rectToScreen(transform, note.frame)
+        return (
+          <textarea
+            value={editing.text}
+            onChange={(e) => setEditing({ ...editing, text: e.target.value })}
+            style={{
+              position: 'absolute',
+              left: screenRect.x + 8,
+              top: screenRect.y + 8,
+              width: screenRect.w - 16,
+              height: screenRect.h - 16,
+              border: '2px solid #4aa3ff',
+              borderRadius: 8,
+              background: '#fff',
+              resize: 'none',
+              outline: 'none',
+              font: `14px -apple-system, system-ui, sans-serif`,
+              padding: 0,
+              lineHeight: '18px'
+            }}
+            autoFocus
+            onBlur={() => finishEditing(true)}
+          />
+        )
+      })()}
       <div style={{ position: 'absolute', left: 12, bottom: 12, color: '#fff', fontSize: 12, opacity: 0.8 }}>
         {Math.round(transform.scale * 100)}%
       </div>

@@ -40,7 +40,7 @@ Status: MVP planning in progress. Source: SPECS.md (schema v1).
 - NOTE-5 [mvp] Fade toggle (50% alpha) — owner: unassigned — status: todo
 
 ### 4) Selection & Movement
-- SEL-1 [mvp] Click/shift additive selection; marquee subtract — owner: unassigned — status: todo
+- SEL-1 [mvp] Click/shift additive selection; marquee subtract — owner: @unassigned — status: done
 - SEL-2 [mvp] Nudge (1px / 10px with Shift) — owner: unassigned — status: todo
 - SEL-3 [mvp] Movement mode (M) arrow-keys continuous nudge — owner: unassigned — status: todo
 - SEL-4 [mvp] Shift-constrained drag (H/V) — owner: unassigned — status: todo

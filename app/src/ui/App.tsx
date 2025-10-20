@@ -8,10 +8,15 @@ export function App() {
   const [doc, setDoc] = React.useState<BoardDocument>(() => ({
     ...makeEmptyDoc(),
     notes: [
-      { id: 'n1', text: 'Double-click to add notes (soon)', frame: { x: 100, y: 100, w: 220, h: 90 } },
-      { id: 'n2', text: 'Pan: drag • Zoom: wheel', frame: { x: 420, y: 240, w: 220, h: 90 } },
-      { id: 'n3', text: 'Zero-latency feel target', frame: { x: 260, y: 420, w: 200, h: 72 }, faded: true },
+      { id: 'n1', text: '✨ Double-click empty space to create notes', frame: { x: 100, y: 100, w: 240, h: 80 } },
+      { id: 'n2', text: '🖱️ Drag notes to move • Space+drag to pan', frame: { x: 380, y: 140, w: 260, h: 80 } },
+      { id: 'n3', text: '⌨️ Select note → Enter to edit • Esc to finish', frame: { x: 150, y: 240, w: 280, h: 80 } },
+      { id: 'n4', text: '🔗 Alt+drag from note to note = connection', frame: { x: 480, y: 280, w: 250, h: 80 } },
+      { id: 'n5', text: '🗑️ Select notes → Delete/Backspace to remove', frame: { x: 220, y: 380, w: 280, h: 80 } },
     ],
+    connections: [
+      { id: 'c1', srcNoteId: 'n3', dstNoteId: 'n4', style: { kind: 'dotted', arrows: 'none' } }
+    ]
   }))
   const [selection, setSelection] = React.useState<string[]>([])
 
@@ -40,7 +45,14 @@ export function App() {
         <div style={{ marginLeft: 'auto', opacity: 0.7, fontSize: 12 }}>schema v{doc.schemaVersion}</div>
       </div>
       <div style={{ flex: 1 }}>
-        <Canvas notes={doc.notes} selectedIds={selection} onSelectionChange={setSelection} />
+        <Canvas 
+          notes={doc.notes} 
+          connections={doc.connections}
+          selectedIds={selection} 
+          onSelectionChange={setSelection}
+          onNotesChange={(notes) => setDoc(prev => ({ ...prev, notes }))}
+          onConnectionsChange={(connections) => setDoc(prev => ({ ...prev, connections }))}
+        />
       </div>
     </div>
   )
