@@ -11,7 +11,8 @@ import {
   CreateConnectionCommand,
   DeleteConnectionCommand,
   UpdateNotesCommand,
-  UpdateConnectionsCommand
+  UpdateConnectionsCommand,
+  UpdateConnectionEndpointsCommand
 } from '../../state/commands'
 
 type Props = {
@@ -55,13 +56,16 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
   const panStart = useRef<Point | null>(null)
   const panStartTxTy = useRef<{ tx: number; ty: number }>({ tx: 0, ty: 0 })
   const [marquee, setMarquee] = useState<null | { start: Point; end: Point; subtract: boolean }>(null)
-  const [dragging, setDragging] = useState<{ 
-    type: 'move' | 'connect' | 'resize', 
-    noteIds: string[], 
-    startWorld: Point, 
+  const [dragging, setDragging] = useState<{
+    type: 'move' | 'connect' | 'resize' | 'move-connection-endpoint',
+    noteIds: string[],
+    startWorld: Point,
     startFrames: Map<string, Rect>,
     sourceNoteId?: string,
-    resizeHandle?: 'se' | 'e' | 's'
+    resizeHandle?: 'se' | 'e' | 's',
+    connectionId?: string,
+    endpointType?: 'source' | 'destination',
+    originalConnection?: Connection
   } | null>(null)
   const [editing, setEditing] = useState<{ noteId: string, text: string } | null>(null)
   const [editingConnection, setEditingConnection] = useState<{ connectionId: string, text: string, position: Point } | null>(null)
@@ -497,14 +501,14 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
         const length = Math.sqrt(dx * dx + dy * dy)
         const unitX = dx / length
         const unitY = dy / length
-        
+
         if (arrows === 'dst' || arrows === 'both') {
           // Arrow at destination
           const arrowX = dstScreen.x - unitX * arrowSize
           const arrowY = dstScreen.y - unitY * arrowSize
           const perpX = -unitY * arrowSize * 0.5
           const perpY = unitX * arrowSize * 0.5
-          
+
           ctx.beginPath()
           ctx.moveTo(dstScreen.x, dstScreen.y)
           ctx.lineTo(arrowX + perpX, arrowY + perpY)
@@ -512,14 +516,14 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
           ctx.closePath()
           ctx.fill()
         }
-        
+
         if (arrows === 'src' || arrows === 'both') {
           // Arrow at source
           const arrowX = srcScreen.x + unitX * arrowSize
           const arrowY = srcScreen.y + unitY * arrowSize
           const perpX = -unitY * arrowSize * 0.5
           const perpY = unitX * arrowSize * 0.5
-          
+
           ctx.beginPath()
           ctx.moveTo(srcScreen.x, srcScreen.y)
           ctx.lineTo(arrowX + perpX, arrowY + perpY)
@@ -528,6 +532,24 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
           ctx.fill()
         }
       }
+
+      // Draw connection endpoints (always visible for better UX)
+      const endpointRadius = Math.max(4, 6 * transform.scale)
+
+      // Source endpoint
+      ctx.fillStyle = isSelected ? '#4aa3ff' : 'rgba(255,255,255,0.8)'
+      ctx.strokeStyle = isSelected ? '#fff' : 'rgba(0,0,0,0.3)'
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.arc(srcScreen.x, srcScreen.y, endpointRadius, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+
+      // Destination endpoint
+      ctx.beginPath()
+      ctx.arc(dstScreen.x, dstScreen.y, endpointRadius, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
     }
 
     // draw notes
@@ -631,12 +653,34 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
       
       const hit = hitTest(notes, world)
       const connectionHit = hitTestConnectionLabel(connections, notes, world, transform)
+      const endpointHit = hitTestConnectionEndpoint(connections, notes, world, 12 / transform.scale)
 
       // Check for connection label double-click
       if (connectionHit && timeSinceLastClick < 500 && distFromLastClick < 10) {
         // Double-click on connection label - start editing
         startEditingConnectionLabel(connectionHit.id)
         lastClickTime.current = 0 // Reset to prevent triple-click issues
+        return
+      }
+
+      // Handle endpoint dragging (takes priority over connection selection)
+      if (endpointHit) {
+        // Select the connection when endpoint is clicked
+        onSelectionChange?.([endpointHit.connection.id])
+
+        // Start endpoint dragging
+        setDragging({
+          type: 'move-connection-endpoint',
+          noteIds: [], // No notes being moved
+          startWorld: world,
+          startFrames: new Map(),
+          connectionId: endpointHit.connection.id,
+          endpointType: endpointHit.endpointType,
+          originalConnection: { ...endpointHit.connection }
+        })
+
+        lastClickTime.current = now
+        lastClickPos.current = pos
         return
       }
 
@@ -760,11 +804,11 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
         setTransform(t => ({ ...t, tx: panStartTxTy.current.tx + dx, ty: panStartTxTy.current.ty + dy }))
       }
       
-      if (dragging && onNotesChange) {
-        if (dragging.type === 'move') {
+      if (dragging) {
+        if (dragging.type === 'move' && onNotesChange) {
           const dx = currWorld.x - dragging.startWorld.x
           const dy = currWorld.y - dragging.startWorld.y
-          
+
           const updatedNotes = notes.map(note => {
             if (dragging.noteIds.includes(note.id)) {
               const startFrame = dragging.startFrames.get(note.id)
@@ -782,16 +826,16 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
             return note
           })
           onNotesChange(updatedNotes)
-        } else if (dragging.type === 'resize' && dragging.resizeHandle) {
+        } else if (dragging.type === 'resize' && dragging.resizeHandle && onNotesChange) {
           const dx = currWorld.x - dragging.startWorld.x
           const dy = currWorld.y - dragging.startWorld.y
-          
+
           const updatedNotes = notes.map(note => {
             if (dragging.noteIds.includes(note.id)) {
               const startFrame = dragging.startFrames.get(note.id)
               if (startFrame) {
                 let newFrame = { ...startFrame }
-                
+
                 if (dragging.resizeHandle === 'se') {
                   // Southeast corner - resize both width and height
                   newFrame.w = Math.max(100, startFrame.w + dx)
@@ -803,13 +847,38 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
                   // South edge - resize height only
                   newFrame.h = Math.max(60, startFrame.h + dy)
                 }
-                
+
                 return { ...note, frame: newFrame }
               }
             }
             return note
           })
           onNotesChange(updatedNotes)
+        } else if (dragging.type === 'move-connection-endpoint' && dragging.connectionId && dragging.originalConnection && onConnectionsChange) {
+          // Find the target note at current position
+          const targetNote = hitTest(notes, currWorld)
+
+          if (targetNote && targetNote.id !== dragging.originalConnection.id) {
+            // Create updated connection with new endpoint
+            const updatedConnections = connections.map(conn => {
+              if (conn.id === dragging.connectionId) {
+                const oldSrcNoteId = dragging.originalConnection!.srcNoteId
+                const oldDstNoteId = dragging.originalConnection!.dstNoteId
+
+                if (dragging.endpointType === 'source') {
+                  // Don't allow connecting to the same note that's already the destination
+                  if (targetNote.id === oldDstNoteId) return conn
+                  return { ...conn, srcNoteId: targetNote.id }
+                } else {
+                  // Don't allow connecting to the same note that's already the source
+                  if (targetNote.id === oldSrcNoteId) return conn
+                  return { ...conn, dstNoteId: targetNote.id }
+                }
+              }
+              return conn
+            })
+            onConnectionsChange(updatedConnections)
+          }
         }
       }
       
@@ -820,7 +889,12 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
       // Update cursor based on hover and movement mode
       if (!panning && !dragging) {
         let newCursor = movementMode ? 'crosshair' : 'default'
-        if (selectedIds.length === 1) {
+
+        // Check for connection endpoint hover first (highest priority)
+        const endpointHit = hitTestConnectionEndpoint(connections, notes, currWorld, 12 / transform.scale)
+        if (endpointHit) {
+          newCursor = 'move'
+        } else if (selectedIds.length === 1) {
           const selectedNote = notes.find(n => n.id === selectedIds[0])
           if (selectedNote) {
             const handle = hitTestResizeHandle(selectedNote, currWorld, 12 / transform.scale)
@@ -893,6 +967,23 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
             if (oldFrame.w !== newFrame.w || oldFrame.h !== newFrame.h) {
               onExecuteCommand(new ResizeNoteCommand(noteId, oldFrame, newFrame))
             }
+          }
+        } else if (dragging.type === 'move-connection-endpoint' && dragging.connectionId && dragging.originalConnection) {
+          // Find final connection state
+          const currentConnection = connections.find(c => c.id === dragging.connectionId)
+          const originalConnection = dragging.originalConnection
+
+          if (currentConnection &&
+              (currentConnection.srcNoteId !== originalConnection.srcNoteId ||
+               currentConnection.dstNoteId !== originalConnection.dstNoteId)) {
+            // Create undo command for endpoint change
+            onExecuteCommand(new UpdateConnectionEndpointsCommand(
+              dragging.connectionId,
+              originalConnection.srcNoteId,
+              originalConnection.dstNoteId,
+              currentConnection.srcNoteId,
+              currentConnection.dstNoteId
+            ))
           }
         }
 
@@ -1279,6 +1370,36 @@ function hitTestConnectionLabel(connections: Connection[], notes: Note[], pWorld
     if (pWorld.x >= labelBounds.x && pWorld.x <= labelBounds.x + labelBounds.w &&
         pWorld.y >= labelBounds.y && pWorld.y <= labelBounds.y + labelBounds.h) {
       return conn
+    }
+  }
+  return null
+}
+
+function hitTestConnectionEndpoint(connections: Connection[], notes: Note[], pWorld: Point, tolerance = 8): { connection: Connection, endpointType: 'source' | 'destination' } | null {
+  for (const conn of connections) {
+    const srcNote = notes.find(n => n.id === conn.srcNoteId)
+    const dstNote = notes.find(n => n.id === conn.dstNoteId)
+    if (!srcNote || !dstNote) continue
+
+    const srcCenter = {
+      x: srcNote.frame.x + srcNote.frame.w / 2,
+      y: srcNote.frame.y + srcNote.frame.h / 2
+    }
+    const dstCenter = {
+      x: dstNote.frame.x + dstNote.frame.w / 2,
+      y: dstNote.frame.y + dstNote.frame.h / 2
+    }
+
+    // Check source endpoint
+    const srcDist = Math.sqrt(Math.pow(pWorld.x - srcCenter.x, 2) + Math.pow(pWorld.y - srcCenter.y, 2))
+    if (srcDist <= tolerance) {
+      return { connection: conn, endpointType: 'source' }
+    }
+
+    // Check destination endpoint
+    const dstDist = Math.sqrt(Math.pow(pWorld.x - dstCenter.x, 2) + Math.pow(pWorld.y - dstCenter.y, 2))
+    if (dstDist <= tolerance) {
+      return { connection: conn, endpointType: 'destination' }
     }
   }
   return null

@@ -10,6 +10,7 @@ pub struct Point {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[allow(dead_code)]  // Reserved for future use (note resizing, etc.)
 pub struct Size {
     pub w: f64,
     pub h: f64,

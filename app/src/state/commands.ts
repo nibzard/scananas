@@ -408,3 +408,42 @@ export class UpdateConnectionsCommand implements Command {
     }
   }
 }
+
+export class UpdateConnectionEndpointsCommand implements Command {
+  description = 'Update connection endpoints'
+  private readonly connectionId: string
+  private readonly oldSrcNoteId: string
+  private readonly oldDstNoteId: string
+  private readonly newSrcNoteId: string
+  private readonly newDstNoteId: string
+
+  constructor(connectionId: string, oldSrcNoteId: string, oldDstNoteId: string, newSrcNoteId: string, newDstNoteId: string) {
+    this.connectionId = connectionId
+    this.oldSrcNoteId = oldSrcNoteId
+    this.oldDstNoteId = oldDstNoteId
+    this.newSrcNoteId = newSrcNoteId
+    this.newDstNoteId = newDstNoteId
+  }
+
+  execute(doc: BoardDocument): BoardDocument {
+    return {
+      ...doc,
+      connections: doc.connections.map(conn =>
+        conn.id === this.connectionId
+          ? { ...conn, srcNoteId: this.newSrcNoteId, dstNoteId: this.newDstNoteId }
+          : conn
+      )
+    }
+  }
+
+  undo(doc: BoardDocument): BoardDocument {
+    return {
+      ...doc,
+      connections: doc.connections.map(conn =>
+        conn.id === this.connectionId
+          ? { ...conn, srcNoteId: this.oldSrcNoteId, dstNoteId: this.oldDstNoteId }
+          : conn
+      )
+    }
+  }
+}
