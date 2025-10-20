@@ -48,6 +48,7 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
     resizeHandle?: 'se' | 'e' | 's'
   } | null>(null)
   const [editing, setEditing] = useState<{ noteId: string, text: string } | null>(null)
+  const [cursor, setCursor] = useState<string>('default')
   const lastClickTime = useRef<number>(0)
   const lastClickPos = useRef<Point>({ x: 0, y: 0 })
 
@@ -230,12 +231,37 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
       const pad = 8 * transform.scale
       wrapText(ctx, n.text, r.x + pad, r.y + pad, r.w - 2 * pad, 18 * transform.scale)
     }
+
+    // Draw resize handles for selected notes (only if single selection)
+    if (selectedIds.length === 1) {
+      const selectedNote = notes.find(n => n.id === selectedIds[0])
+      if (selectedNote) {
+        const r = rectToScreen(transform, selectedNote.frame)
+        const handleSize = 8
+        
+        ctx.fillStyle = '#4aa3ff'
+        ctx.strokeStyle = '#fff'
+        ctx.lineWidth = 1
+        
+        // Southeast corner handle
+        ctx.fillRect(r.x + r.w - handleSize/2, r.y + r.h - handleSize/2, handleSize, handleSize)
+        ctx.strokeRect(r.x + r.w - handleSize/2, r.y + r.h - handleSize/2, handleSize, handleSize)
+        
+        // East edge handle
+        ctx.fillRect(r.x + r.w - handleSize/2, r.y + r.h/2 - handleSize/2, handleSize, handleSize)
+        ctx.strokeRect(r.x + r.w - handleSize/2, r.y + r.h/2 - handleSize/2, handleSize, handleSize)
+        
+        // South edge handle
+        ctx.fillRect(r.x + r.w/2 - handleSize/2, r.y + r.h - handleSize/2, handleSize, handleSize)
+        ctx.strokeRect(r.x + r.w/2 - handleSize/2, r.y + r.h - handleSize/2, handleSize, handleSize)
+      }
+    }
   }
 
   useEffect(() => {
     draw()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notes, connections, transform])
+  }, [notes, connections, transform, selectedIds])
 
   // Mouse interactions
   useEffect(() => {
@@ -276,6 +302,28 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
       )
       
       const hit = hitTest(notes, world)
+      
+      // Check for resize handle hit on selected notes first
+      if (selectedIds.length === 1) {
+        const selectedNote = notes.find(n => n.id === selectedIds[0])
+        if (selectedNote) {
+          const resizeHandle = hitTestResizeHandle(selectedNote, world, 12 / transform.scale)
+          if (resizeHandle) {
+            // Start resize operation
+            const startFrames = new Map<string, Rect>()
+            startFrames.set(selectedNote.id, { ...selectedNote.frame })
+            setDragging({
+              type: 'resize',
+              noteIds: [selectedNote.id],
+              startWorld: world,
+              startFrames,
+              resizeHandle
+            })
+            return
+          }
+        }
+      }
+      
       if (!hit && timeSinceLastClick < 500 && distFromLastClick < 10) {
         // Double-click on empty area - create note
         createNote(world)
@@ -336,31 +384,86 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
         setTransform(t => ({ ...t, tx: panStartTxTy.current.tx + dx, ty: panStartTxTy.current.ty + dy }))
       }
       
-      if (dragging && onNotesChange && dragging.type === 'move') {
-        const dx = currWorld.x - dragging.startWorld.x
-        const dy = currWorld.y - dragging.startWorld.y
-        
-        const updatedNotes = notes.map(note => {
-          if (dragging.noteIds.includes(note.id)) {
-            const startFrame = dragging.startFrames.get(note.id)
-            if (startFrame) {
-              return {
-                ...note,
-                frame: {
-                  ...startFrame,
-                  x: startFrame.x + dx,
-                  y: startFrame.y + dy
+      if (dragging && onNotesChange) {
+        if (dragging.type === 'move') {
+          const dx = currWorld.x - dragging.startWorld.x
+          const dy = currWorld.y - dragging.startWorld.y
+          
+          const updatedNotes = notes.map(note => {
+            if (dragging.noteIds.includes(note.id)) {
+              const startFrame = dragging.startFrames.get(note.id)
+              if (startFrame) {
+                return {
+                  ...note,
+                  frame: {
+                    ...startFrame,
+                    x: startFrame.x + dx,
+                    y: startFrame.y + dy
+                  }
                 }
               }
             }
-          }
-          return note
-        })
-        onNotesChange(updatedNotes)
+            return note
+          })
+          onNotesChange(updatedNotes)
+        } else if (dragging.type === 'resize' && dragging.resizeHandle) {
+          const dx = currWorld.x - dragging.startWorld.x
+          const dy = currWorld.y - dragging.startWorld.y
+          
+          const updatedNotes = notes.map(note => {
+            if (dragging.noteIds.includes(note.id)) {
+              const startFrame = dragging.startFrames.get(note.id)
+              if (startFrame) {
+                let newFrame = { ...startFrame }
+                
+                if (dragging.resizeHandle === 'se') {
+                  // Southeast corner - resize both width and height
+                  newFrame.w = Math.max(100, startFrame.w + dx)
+                  newFrame.h = Math.max(60, startFrame.h + dy)
+                } else if (dragging.resizeHandle === 'e') {
+                  // East edge - resize width only
+                  newFrame.w = Math.max(100, startFrame.w + dx)
+                } else if (dragging.resizeHandle === 's') {
+                  // South edge - resize height only
+                  newFrame.h = Math.max(60, startFrame.h + dy)
+                }
+                
+                return { ...note, frame: newFrame }
+              }
+            }
+            return note
+          })
+          onNotesChange(updatedNotes)
+        }
       }
       
       if (marquee) {
         setMarquee({ ...marquee, end: curr })
+      }
+      
+      // Update cursor based on hover
+      if (!panning && !dragging) {
+        let newCursor = 'default'
+        if (selectedIds.length === 1) {
+          const selectedNote = notes.find(n => n.id === selectedIds[0])
+          if (selectedNote) {
+            const handle = hitTestResizeHandle(selectedNote, currWorld, 12 / transform.scale)
+            if (handle === 'se') newCursor = 'se-resize'
+            else if (handle === 'e') newCursor = 'e-resize'  
+            else if (handle === 's') newCursor = 's-resize'
+            else {
+              const hit = hitTest(notes, currWorld)
+              if (hit) newCursor = 'move'
+            }
+          } else {
+            const hit = hitTest(notes, currWorld)
+            if (hit) newCursor = 'move'
+          }
+        } else {
+          const hit = hitTest(notes, currWorld)
+          if (hit) newCursor = 'move'
+        }
+        setCursor(newCursor)
       }
     }
     const onUp = (e: MouseEvent) => {
@@ -409,7 +512,12 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}>
-      <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block', cursor: (panning || spacePan) ? 'grabbing' : 'default' }} />
+      <canvas ref={canvasRef} style={{ 
+        width: '100%', 
+        height: '100%', 
+        display: 'block', 
+        cursor: (panning || spacePan) ? 'grabbing' : cursor 
+      }} />
       {marquee && (
         <div
           style={{
