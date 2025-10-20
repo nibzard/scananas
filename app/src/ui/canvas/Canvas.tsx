@@ -63,6 +63,7 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
     resizeHandle?: 'se' | 'e' | 's'
   } | null>(null)
   const [editing, setEditing] = useState<{ noteId: string, text: string } | null>(null)
+  const [editingConnection, setEditingConnection] = useState<{ connectionId: string, text: string, position: Point } | null>(null)
   const [cursor, setCursor] = useState<string>('default')
   const [movementMode, setMovementMode] = useState<boolean>(false)
   const lastClickTime = useRef<number>(0)
@@ -154,6 +155,64 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
     setEditing(null)
   }
 
+  const startEditingConnectionLabel = (connectionId: string) => {
+    const connection = connections.find(c => c.id === connectionId)
+    if (!connection) return
+
+    const srcNote = notes.find(n => n.id === connection.srcNoteId)
+    const dstNote = notes.find(n => n.id === connection.dstNoteId)
+    if (!srcNote || !dstNote) return
+
+    const srcCenter = {
+      x: srcNote.frame.x + srcNote.frame.w / 2,
+      y: srcNote.frame.y + srcNote.frame.h / 2
+    }
+    const dstCenter = {
+      x: dstNote.frame.x + dstNote.frame.w / 2,
+      y: dstNote.frame.y + dstNote.frame.h / 2
+    }
+
+    const midPoint = {
+      x: (srcCenter.x + dstCenter.x) / 2,
+      y: (srcCenter.y + dstCenter.y) / 2
+    }
+
+    setEditingConnection({
+      connectionId,
+      text: connection.label || '',
+      position: midPoint
+    })
+  }
+
+  const finishEditingConnectionLabel = (save: boolean = true) => {
+    if (!editingConnection) return
+
+    if (save && onExecuteCommand) {
+      const connection = connections.find(c => c.id === editingConnection.connectionId)
+      if (connection) {
+        const oldLabel = connection.label || ''
+        const newLabel = editingConnection.text.trim()
+
+        if (oldLabel !== newLabel) {
+          const updatedConnections = connections.map(c =>
+            c.id === editingConnection.connectionId
+              ? { ...c, label: newLabel || undefined }
+              : c
+          )
+          if (onConnectionsChange) {
+            onConnectionsChange(updatedConnections)
+          }
+
+          // Create undo command
+          const previousStates = [connection]
+          const updates = { label: newLabel || undefined }
+          onExecuteCommand(new UpdateConnectionsCommand([editingConnection.connectionId], updates, previousStates))
+        }
+      }
+    }
+    setEditingConnection(null)
+  }
+
   const deleteSelectedNotes = () => {
     if (selectedIds.length === 0 || !onExecuteCommand) return
 
@@ -205,14 +264,14 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
       if (e.code === 'Space') setSpacePan(true)
 
       // Movement mode toggle (M key)
-      if (e.code === 'KeyM' && !editing) {
+      if (e.code === 'KeyM' && !editing && !editingConnection) {
         e.preventDefault()
         setMovementMode(prev => !prev)
         return
       }
 
       // Select All (Ctrl/Cmd + A)
-      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyA' && !editing) {
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyA' && !editing && !editingConnection) {
         e.preventDefault()
         const allIds = notes.map(n => n.id)
         onSelectionChange?.(allIds)
@@ -220,7 +279,7 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
       }
 
       // Arrow key handling - different behavior in movement mode vs normal mode
-      if (!editing && selectedIds.length > 0 && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
+      if (!editing && !editingConnection && selectedIds.length > 0 && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
         e.preventDefault()
 
         if (movementMode) {
@@ -268,7 +327,15 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
         e.preventDefault()
         finishEditing(true)
       }
-      if ((e.code === 'Delete' || e.code === 'Backspace') && !editing && selectedIds.length > 0) {
+      if (e.code === 'Escape' && editingConnection) {
+        e.preventDefault()
+        finishEditingConnectionLabel(false)
+      }
+      if (e.code === 'Enter' && editingConnection) {
+        e.preventDefault()
+        finishEditingConnectionLabel(true)
+      }
+      if ((e.code === 'Delete' || e.code === 'Backspace') && !editing && !editingConnection && selectedIds.length > 0) {
         e.preventDefault()
         deleteSelectedNotes()
       }
@@ -365,9 +432,10 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
       const srcScreen = applyTransform(transform, srcCenter)
       const dstScreen = applyTransform(transform, dstCenter)
 
-      const color = conn.style?.color || 'rgba(255,255,255,0.6)'
-      const lineWidth = (conn.style?.width || 2) * transform.scale
-      
+      const isSelected = selectedIds.includes(conn.id)
+      const color = conn.style?.color || (isSelected ? 'rgba(74,163,255,0.8)' : 'rgba(255,255,255,0.6)')
+      const lineWidth = (conn.style?.width || (isSelected ? 3 : 2)) * transform.scale
+
       ctx.strokeStyle = color
       ctx.fillStyle = color
       ctx.lineWidth = lineWidth
@@ -379,7 +447,46 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
       ctx.lineTo(dstScreen.x, dstScreen.y)
       ctx.stroke()
       ctx.setLineDash([])
-      
+
+      // Draw connection label if it exists
+      if (conn.label) {
+        const midX = (srcScreen.x + dstScreen.x) / 2
+        const midY = (srcScreen.y + dstScreen.y) / 2
+
+        ctx.save()
+        ctx.fillStyle = '#fff'
+        ctx.strokeStyle = color
+        ctx.lineWidth = 1
+
+        // Measure text
+        ctx.font = `${12 * transform.scale}px -apple-system, system-ui, sans-serif`
+        const textMetrics = ctx.measureText(conn.label)
+        const textWidth = textMetrics.width
+        const textHeight = 12 * transform.scale
+        const padding = 4 * transform.scale
+
+        // Draw background rectangle
+        ctx.fillRect(
+          midX - textWidth / 2 - padding,
+          midY - textHeight / 2 - padding,
+          textWidth + padding * 2,
+          textHeight + padding * 2
+        )
+        ctx.strokeRect(
+          midX - textWidth / 2 - padding,
+          midY - textHeight / 2 - padding,
+          textWidth + padding * 2,
+          textHeight + padding * 2
+        )
+
+        // Draw text
+        ctx.fillStyle = '#202124'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillText(conn.label, midX, midY)
+        ctx.restore()
+      }
+
       // Draw arrows if specified
       const arrows = conn.style?.arrows || 'none'
       if (arrows !== 'none') {
@@ -517,7 +624,36 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
       )
       
       const hit = hitTest(notes, world)
-      
+      const connectionHit = hitTestConnectionLabel(connections, notes, world, transform)
+
+      // Check for connection label double-click
+      if (connectionHit && timeSinceLastClick < 500 && distFromLastClick < 10) {
+        // Double-click on connection label - start editing
+        startEditingConnectionLabel(connectionHit.id)
+        lastClickTime.current = 0 // Reset to prevent triple-click issues
+        return
+      }
+
+      // Handle connection selection
+      if (connectionHit) {
+        // Single click on connection label - select connection
+        if (e.shiftKey) {
+          const set = new Set(selectedIds)
+          if (set.has(connectionHit.id)) {
+            set.delete(connectionHit.id)
+          } else {
+            set.add(connectionHit.id)
+          }
+          const newSelection = Array.from(set)
+          onSelectionChange?.(newSelection)
+        } else {
+          onSelectionChange?.([connectionHit.id])
+        }
+        lastClickTime.current = now
+        lastClickPos.current = pos
+        return
+      }
+
       // Check for resize handle hit on selected notes first
       if (selectedIds.length === 1) {
         const selectedNote = notes.find(n => n.id === selectedIds[0])
@@ -841,6 +977,31 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
           />
         )
       })()}
+      {editingConnection && (() => {
+        const screenPos = applyTransform(transform, editingConnection.position)
+        return (
+          <input
+            type="text"
+            value={editingConnection.text}
+            onChange={(e) => setEditingConnection({ ...editingConnection, text: e.target.value })}
+            style={{
+              position: 'absolute',
+              left: screenPos.x - 50,
+              top: screenPos.y - 10,
+              width: 100,
+              border: '2px solid #4aa3ff',
+              borderRadius: 4,
+              background: '#fff',
+              outline: 'none',
+              font: `12px -apple-system, system-ui, sans-serif`,
+              padding: '2px 4px',
+              textAlign: 'center'
+            }}
+            autoFocus
+            onBlur={() => finishEditingConnectionLabel(true)}
+          />
+        )
+      })()}
       <div style={{ position: 'absolute', left: 12, bottom: 12, color: '#fff', fontSize: 12, opacity: 0.8 }}>
         {Math.round(transform.scale * 100)}%
         {movementMode && (
@@ -942,4 +1103,49 @@ function screenRectToWorld(t: Transform, r: { x: number; y: number; w: number; h
 
 function rectsIntersect(a: Rect, b: { x: number; y: number; w: number; h: number }) {
   return !(a.x + a.w < b.x || b.x + b.w < a.x || a.y + a.h < b.y || b.y + b.h < a.y)
+}
+
+function hitTestConnectionLabel(connections: Connection[], notes: Note[], pWorld: Point, t: Transform): Connection | null {
+  for (const conn of connections) {
+    if (!conn.label) continue
+
+    const srcNote = notes.find(n => n.id === conn.srcNoteId)
+    const dstNote = notes.find(n => n.id === conn.dstNoteId)
+    if (!srcNote || !dstNote) continue
+
+    const srcCenter = {
+      x: srcNote.frame.x + srcNote.frame.w / 2,
+      y: srcNote.frame.y + srcNote.frame.h / 2
+    }
+    const dstCenter = {
+      x: dstNote.frame.x + dstNote.frame.w / 2,
+      y: dstNote.frame.y + dstNote.frame.h / 2
+    }
+
+    const midX = (srcCenter.x + dstCenter.x) / 2
+    const midY = (srcCenter.y + dstCenter.y) / 2
+
+    // Create a temporary canvas context to measure text
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')!
+    ctx.font = `${12 * t.scale}px -apple-system, system-ui, sans-serif`
+    const textMetrics = ctx.measureText(conn.label)
+    const textWidth = textMetrics.width / t.scale // Convert back to world coordinates
+    const textHeight = 12
+    const padding = 4
+
+    // Check if point is within label bounds
+    const labelBounds = {
+      x: midX - textWidth / 2 - padding,
+      y: midY - textHeight / 2 - padding,
+      w: textWidth + padding * 2,
+      h: textHeight + padding * 2
+    }
+
+    if (pWorld.x >= labelBounds.x && pWorld.x <= labelBounds.x + labelBounds.w &&
+        pWorld.y >= labelBounds.y && pWorld.y <= labelBounds.y + labelBounds.h) {
+      return conn
+    }
+  }
+  return null
 }

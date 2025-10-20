@@ -260,6 +260,30 @@ function ConnectionPanel({ selectedConnections, onUpdate }: {
         {isMultiple ? `${selectedConnections.length} connections selected` : 'Connection Properties'}
       </div>
 
+      {/* Label */}
+      {!isMultiple && (
+        <div>
+          <label style={{ display: 'block', fontSize: 12, marginBottom: 4, color: '#ccc' }}>
+            Label
+          </label>
+          <input
+            type="text"
+            value={firstConnection.label || ''}
+            onChange={(e) => onUpdate({ label: e.target.value || undefined })}
+            placeholder="Enter connection label..."
+            style={{
+              width: '100%',
+              padding: 8,
+              background: '#333',
+              border: '1px solid #555',
+              borderRadius: 4,
+              color: '#fff',
+              fontSize: 12
+            }}
+          />
+        </div>
+      )}
+
       {/* Line Style */}
       <div>
         <label style={{ display: 'block', fontSize: 12, marginBottom: 8, color: '#ccc' }}>

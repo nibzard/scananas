@@ -30,7 +30,8 @@ export function App() {
       { id: 'n5', text: '🗑️ Select notes → Delete/Backspace to remove', frame: { x: 220, y: 380, w: 280, h: 80 } },
     ],
     connections: [
-      { id: 'c1', srcNoteId: 'n3', dstNoteId: 'n4', style: { kind: 'dotted', arrows: 'none' } }
+      { id: 'c1', srcNoteId: 'n3', dstNoteId: 'n4', style: { kind: 'dotted', arrows: 'none' }, label: 'then' },
+      { id: 'c2', srcNoteId: 'n1', dstNoteId: 'n2', style: { kind: 'solid', arrows: 'dst', color: '#4aa3ff', width: 3 }, label: 'leads to' }
     ]
   }), [])
 
