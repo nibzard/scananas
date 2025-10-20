@@ -10,7 +10,7 @@ import { makeEmptyDoc } from '../state'
 import { useCommandStack } from '../hooks/useCommandStack'
 import { useAutosave } from '../hooks/useAutosave'
 import { openDocument, openSpecificDocument, saveDocument, checkRecoveryFiles } from '../bridge/tauri'
-import { exportToPNG, exportToTXT, downloadFile, downloadText } from '../export/canvasExport'
+import { exportToPNG, exportToTXT, exportToPDF, downloadFile, downloadText } from '../export/canvasExport'
 import { UpdateNotesCommand, UpdateConnectionsCommand } from '../state/commands'
 
 interface AutosaveInfo {
@@ -141,6 +141,17 @@ export function App() {
     }
   }
 
+  const onExportPDF = async () => {
+    try {
+      const blob = await exportToPDF(doc, { format: 'pdf', scale: 2 })
+      const filename = `fim-export-${Date.now()}.pdf`
+      await downloadFile(blob, filename)
+      console.log('PDF exported:', filename)
+    } catch (e) {
+      console.warn('PDF export failed', e)
+    }
+  }
+
   const handleRecovery = (recoveredDoc: BoardDocument, originalPath: string) => {
     setDocument(recoveredDoc)
     setCurrentFilePath(originalPath)
@@ -224,6 +235,7 @@ export function App() {
         <div style={{ height: 24, width: 1, background: '#333', margin: '0 4px' }} />
         <button onClick={onExportPNG} style={btnStyle}>Export PNG</button>
         <button onClick={onExportTXT} style={btnStyle}>Export TXT</button>
+        <button onClick={onExportPDF} style={btnStyle}>Export PDF</button>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
           <button onClick={() => setShowHelp(true)} style={{ ...btnStyle, background: '#333' }}>
             Help (?)

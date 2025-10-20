@@ -1,4 +1,5 @@
 import type { BoardDocument, Note, Connection } from '../model/types'
+import { jsPDF } from 'jspdf'
 
 export interface ExportOptions {
   format: 'png' | 'pdf' | 'txt'
@@ -86,6 +87,103 @@ export function exportToTXT(document: BoardDocument): string {
   output += `${document.notes.length} notes, ${document.connections.length} connections\n`
   
   return output
+}
+
+export async function exportToPDF(
+  document: BoardDocument,
+  options: ExportOptions = { format: 'pdf' }
+): Promise<Blob> {
+  const scale = options.scale || 2 // 2x for high quality
+  const margin = options.margin || 50
+  const background = options.background || '#202124'
+
+  // Calculate content bounds
+  const bounds = calculateContentBounds(document.notes)
+
+  // Create offscreen canvas for rendering
+  const canvas = document.createElement('canvas')
+  const ctx = canvas.getContext('2d')!
+
+  // Set canvas size
+  const canvasWidth = (bounds.width + margin * 2) * scale
+  const canvasHeight = (bounds.height + margin * 2) * scale
+  canvas.width = canvasWidth
+  canvas.height = canvasHeight
+
+  // Set up rendering context
+  ctx.scale(scale, scale)
+  ctx.translate(margin - bounds.minX, margin - bounds.minY)
+
+  // Clear background
+  ctx.fillStyle = background
+  ctx.fillRect(bounds.minX - margin, bounds.minY - margin, bounds.width + margin * 2, bounds.height + margin * 2)
+
+  // Render connections first (behind notes)
+  for (const connection of document.connections) {
+    renderConnection(ctx, connection, document.notes)
+  }
+
+  // Render notes
+  for (const note of document.notes) {
+    if (!note.faded || options.includeFaded !== false) {
+      renderNote(ctx, note)
+    }
+  }
+
+  // Convert canvas to image data
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((canvasBlob) => {
+      if (!canvasBlob) {
+        reject(new Error('Failed to render canvas to blob'))
+        return
+      }
+
+      // Convert canvas blob to base64
+      const reader = new FileReader()
+      reader.onload = () => {
+        const imgData = reader.result as string
+
+        // Calculate PDF dimensions (A4 size as default, but scale to fit content)
+        const pdfWidth = Math.max(210, (bounds.width + margin * 2) / 3.78) // Convert pixels to mm (3.78 pixels per mm at 96 DPI)
+        const pdfHeight = Math.max(297, (bounds.height + margin * 2) / 3.78)
+
+        // Create PDF
+        const pdf = new jsPDF({
+          orientation: pdfWidth > pdfHeight ? 'landscape' : 'portrait',
+          unit: 'mm',
+          format: 'a4'
+        })
+
+        // Calculate image dimensions to fit PDF page
+        const pageWidth = pdf.internal.pageSize.getWidth()
+        const pageHeight = pdf.internal.pageSize.getHeight()
+        const imgWidth = pageWidth - 20 // 10mm margin on each side
+        const imgHeight = (canvasHeight / canvasWidth) * imgWidth
+
+        let imgX = 10 // 10mm margin from left
+        let imgY = 10 // 10mm margin from top
+
+        // If image is too tall, scale it to fit page height
+        let finalImgWidth = imgWidth
+        let finalImgHeight = imgHeight
+        if (imgHeight > pageHeight - 20) {
+          finalImgHeight = pageHeight - 20
+          finalImgWidth = (canvasWidth / canvasHeight) * finalImgHeight
+          imgX = (pageWidth - finalImgWidth) / 2 // Center horizontally
+        }
+
+        // Add image to PDF
+        pdf.addImage(imgData, 'PNG', imgX, imgY, finalImgWidth, finalImgHeight)
+
+        // Convert PDF to blob
+        const pdfBlob = pdf.output('blob')
+        resolve(pdfBlob)
+      }
+
+      reader.onerror = () => reject(new Error('Failed to read canvas blob'))
+      reader.readAsDataURL(canvasBlob)
+    }, 'image/png', 1.0)
+  })
 }
 
 interface ContentBounds {
