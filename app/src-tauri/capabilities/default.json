@@ -1,0 +1,75 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capabilities for FIM - Freeform Idea Map application",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "dialog:default",
+    "fs:default",
+    {
+      "identifier": "fs:allow-read-text-file",
+      "allow": [
+        {
+          "path": "$DOCUMENT/**"
+        },
+        {
+          "path": "$DESKTOP/**"
+        },
+        {
+          "path": "$DOWNLOAD/**"
+        }
+      ]
+    },
+    {
+      "identifier": "fs:allow-write-text-file",
+      "allow": [
+        {
+          "path": "$DOCUMENT/**"
+        },
+        {
+          "path": "$DESKTOP/**"
+        },
+        {
+          "path": "$DOWNLOAD/**"
+        }
+      ]
+    },
+    {
+      "identifier": "dialog:allow-open",
+      "allow": [
+        {
+          "filters": [
+            {
+              "name": "JSON Files",
+              "extensions": ["json"]
+            },
+            {
+              "name": "FIM Files", 
+              "extensions": ["fim"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "identifier": "dialog:allow-save",
+      "allow": [
+        {
+          "filters": [
+            {
+              "name": "JSON Files",
+              "extensions": ["json"]
+            },
+            {
+              "name": "FIM Files",
+              "extensions": ["fim"]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

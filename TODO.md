@@ -30,9 +30,17 @@ Status: **Enhanced MVP with Production Improvements**. Core functionality comple
 
 **New Tauri Commands Available:**
 - `open_document()` - Enhanced with better error handling and recent files tracking
-- `save_document()` - Enhanced with validation and state management  
+- `save_document()` - Enhanced with validation and state management
 - `get_recent_files()` - Returns list of 10 most recently accessed files
 - `clear_recent_files()` - Clears the recent files list
+- `open_specific_document(path)` - Opens a specific file from recent files list
+
+**Recent Files UI Integration:**
+- ✅ **RecentFiles Component**: Frontend dropdown with file list, count badge, and path truncation
+- ✅ **Toolbar Integration**: Seamless integration with existing toolbar layout
+- ✅ **Backend Commands**: Complete integration with openSpecificDocument command
+- ✅ **Typed Interfaces**: Full TypeScript interfaces for recent files operations
+- ✅ **Clear Functionality**: User-friendly clear recent files option
 
 ## Conventions
 
@@ -164,7 +172,7 @@ Status: **Enhanced MVP with Production Improvements**. Core functionality comple
 - RF-1 [mvp] Recent files menu with 10 most recent documents — owner: @amp — status: done
 - RF-2 [mvp] Clear recent files command — owner: @amp — status: done
 - RF-3 [mvp] Remember last save location for quick save — owner: @amp — status: done
-- RF-4 [tech] Frontend integration for recent files UI — owner: unassigned — status: todo
+- RF-4 [tech] Frontend integration for recent files UI — owner: @amp — status: done
 
 ### 21) Development & Debugging
 - DEV-1 [tech] CrabNebula DevTools integration for debug builds — owner: @amp — status: done
