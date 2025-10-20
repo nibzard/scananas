@@ -20,6 +20,7 @@ Status: **Enhanced MVP with Production Improvements**. Core functionality comple
 - ✅ **Inspector Panel**: Right sidebar with Note/Connection/Document tabs, live property editing
 - ✅ **Navigation**: Mouse wheel zoom, Space+drag pan, cursor feedback, HiDPI support
 - ✅ **File I/O**: Enhanced JSON open/save with native dialogs, schema versioning, recent files
+- ✅ **Comprehensive Undo/Redo**: Full command pattern implementation for all operations (movement, resize, connections, style changes) with smart continuous operation tracking
 
 **Architecture & Foundation:**
 - ✅ Tauri v2 + React setup with TypeScript/Rust type synchronization
@@ -128,7 +129,7 @@ Status: **Enhanced MVP with Production Improvements**. Core functionality comple
 
 ### 13) Undo / Redo
 - UNDO-1 [mvp] Command stack; coalesce text edits — owner: @amp — status: done
-- UNDO-2 [mvp] Operations: move, style change, connections, stacks, shapes — owner: unassigned — status: todo
+- UNDO-2 [mvp] Operations: move, style change, connections, stacks, shapes — owner: @amp — status: done
 
 ### 14) Theming & Dark Mode
 - THM-1 [mvp] Follow OS; per-document override — owner: unassigned — status: todo

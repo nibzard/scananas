@@ -2,10 +2,11 @@ import React from 'react'
 import { Canvas } from './canvas/Canvas'
 import { Inspector } from './Inspector'
 import { HelpOverlay } from './HelpOverlay'
+import { RecentFiles } from './RecentFiles'
 import type { BoardDocument } from '../model/types'
 import { makeEmptyDoc } from '../state'
 import { useCommandStack } from '../hooks/useCommandStack'
-import { invoke } from '../bridge/tauri'
+import { openDocument, openSpecificDocument, saveDocument } from '../bridge/tauri'
 import { exportToPNG, exportToTXT, downloadFile, downloadText } from '../export/canvasExport'
 import { UpdateNotesCommand, UpdateConnectionsCommand } from '../state/commands'
 
@@ -50,16 +51,25 @@ export function App() {
 
   const onOpen = async () => {
     try {
-      const opened = await invoke<BoardDocument>('open_document')
+      const opened = await openDocument()
       setDocument(opened)
     } catch (e) {
       console.warn('Open cancelled or failed', e)
     }
   }
 
+  const onOpenRecentFile = async (filePath: string) => {
+    try {
+      const opened = await openSpecificDocument(filePath)
+      setDocument(opened)
+    } catch (e) {
+      console.warn('Failed to open recent file:', e)
+    }
+  }
+
   const onSave = async () => {
     try {
-      await invoke<string>('save_document', { args: { doc } })
+      await saveDocument(doc)
     } catch (e) {
       console.warn('Save cancelled or failed', e)
     }
@@ -119,6 +129,7 @@ export function App() {
     <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', gap: 8, padding: '8px 12px', background: '#111', color: '#eee', alignItems: 'center' }}>
         <button onClick={onOpen} style={btnStyle}>Open…</button>
+        <RecentFiles onOpenRecentFile={onOpenRecentFile} />
         <button onClick={onSave} style={btnStyle}>Save As…</button>
         <div style={{ height: 24, width: 1, background: '#333', margin: '0 4px' }} />
         <button onClick={undo} disabled={!canUndo} style={{ ...btnStyle, opacity: canUndo ? 1 : 0.5 }} title={`Undo ${undoDescription || ''} (Ctrl+Z)`}>
