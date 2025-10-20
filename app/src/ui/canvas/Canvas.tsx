@@ -141,6 +141,39 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
     window.addEventListener('resize', resize)
     const onKeyDown = (e: KeyboardEvent) => { 
       if (e.code === 'Space') setSpacePan(true)
+      
+      // Select All (Ctrl/Cmd + A)
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyA' && !editing) {
+        e.preventDefault()
+        const allIds = notes.map(n => n.id)
+        onSelectionChange?.(allIds)
+        return
+      }
+      
+      // Arrow key nudging
+      if (!editing && selectedIds.length > 0 && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
+        e.preventDefault()
+        const nudgeDistance = e.shiftKey ? 10 : 1
+        let dx = 0, dy = 0
+        
+        switch (e.code) {
+          case 'ArrowLeft': dx = -nudgeDistance; break
+          case 'ArrowRight': dx = nudgeDistance; break
+          case 'ArrowUp': dy = -nudgeDistance; break
+          case 'ArrowDown': dy = nudgeDistance; break
+        }
+        
+        if (onNotesChange) {
+          const updatedNotes = notes.map(note => 
+            selectedIds.includes(note.id) 
+              ? { ...note, frame: { ...note.frame, x: note.frame.x + dx, y: note.frame.y + dy } }
+              : note
+          )
+          onNotesChange(updatedNotes)
+        }
+        return
+      }
+      
       if (e.code === 'Enter' && !editing && selectedIds.length === 1) {
         e.preventDefault()
         startEditing(selectedIds[0])

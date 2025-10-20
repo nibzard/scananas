@@ -1,9 +1,11 @@
 import React from 'react'
 import { Canvas } from './canvas/Canvas'
 import { Inspector } from './Inspector'
+import { HelpOverlay } from './HelpOverlay'
 import type { BoardDocument } from '../model/types'
 import { makeEmptyDoc } from '../state'
 import { invoke } from '../bridge/tauri'
+import { exportToPNG, exportToTXT, downloadFile, downloadText } from '../export/canvasExport'
 
 export function App() {
   const [doc, setDoc] = React.useState<BoardDocument>(() => ({
@@ -20,6 +22,7 @@ export function App() {
     ]
   }))
   const [selection, setSelection] = React.useState<string[]>([])
+  const [showHelp, setShowHelp] = React.useState(false)
 
   const onOpen = async () => {
     try {
@@ -38,12 +41,70 @@ export function App() {
     }
   }
 
+  const onExportPNG = async () => {
+    try {
+      const blob = await exportToPNG(doc, { format: 'png', scale: 2 })
+      const filename = `fim-export-${Date.now()}.png`
+      await downloadFile(blob, filename)
+      console.log('PNG exported:', filename)
+    } catch (e) {
+      console.warn('PNG export failed', e)
+    }
+  }
+
+  const onExportTXT = async () => {
+    try {
+      const content = exportToTXT(doc)
+      const filename = `fim-export-${Date.now()}.txt`
+      downloadText(content, filename)
+      console.log('TXT exported:', filename)
+    } catch (e) {
+      console.warn('TXT export failed', e)
+    }
+  }
+
+  // Global keyboard shortcuts
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl/Cmd + S to save
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyS') {
+        e.preventDefault()
+        onSave()
+      }
+      // Ctrl/Cmd + O to open
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyO') {
+        e.preventDefault()
+        onOpen()
+      }
+      // ? or F1 for help
+      if (e.code === 'Slash' && e.shiftKey) { // ? key
+        e.preventDefault()
+        setShowHelp(true)
+      }
+      if (e.code === 'F1') {
+        e.preventDefault()
+        setShowHelp(true)
+      }
+    }
+    
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onSave, onOpen])
+
   return (
     <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', gap: 8, padding: '8px 12px', background: '#111', color: '#eee', alignItems: 'center' }}>
         <button onClick={onOpen} style={btnStyle}>Open…</button>
         <button onClick={onSave} style={btnStyle}>Save As…</button>
-        <div style={{ marginLeft: 'auto', opacity: 0.7, fontSize: 12 }}>schema v{doc.schemaVersion}</div>
+        <div style={{ height: 24, width: 1, background: '#333', margin: '0 4px' }} />
+        <button onClick={onExportPNG} style={btnStyle}>Export PNG</button>
+        <button onClick={onExportTXT} style={btnStyle}>Export TXT</button>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button onClick={() => setShowHelp(true)} style={{ ...btnStyle, background: '#333' }}>
+            Help (?)
+          </button>
+          <div style={{ opacity: 0.7, fontSize: 12 }}>schema v{doc.schemaVersion}</div>
+        </div>
       </div>
       <div style={{ flex: 1, display: 'flex' }}>
         <div style={{ flex: 1 }}>
@@ -66,6 +127,7 @@ export function App() {
           onDocumentChange={setDoc}
         />
       </div>
+      <HelpOverlay isVisible={showHelp} onClose={() => setShowHelp(false)} />
     </div>
   )
 }
