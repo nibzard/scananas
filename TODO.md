@@ -99,8 +99,8 @@ Status: **Enhanced MVP with Production Improvements**. Core functionality comple
 
 ### 5) Connections
 - CON-1 [mvp] Drag note→note to create dotted connector — owner: @amp — status: done (Alt+drag)
-- CON-2 [mvp] Styles: dotted/solid; arrows none/src/dst/both — owner: unassigned — status: todo (basic dotted implemented)
-- CON-3 [mvp] Connection labels at midpoint; editable — owner: unassigned — status: todo
+- CON-2 [mvp] Styles: dotted/solid; arrows none/src/dst/both — owner: unassigned — status: done (completed 2025-10-20) ✅ **COMPLETED**: Full connection styles implementation including solid/dotted line styles and comprehensive arrow options (none/source/destination/both). Added to ConnectionInspector panel with live preview, proper TypeScript interfaces, and full undo/redo integration for style changes.
+- CON-3 [mvp] Connection labels at midpoint; editable — owner: unassigned — status: done (completed 2025-10-20) ✅ **COMPLETED**: Full connection labels implementation including label rendering at midpoint with styled backgrounds, double-click editing with Enter/Esc controls, hit testing for selection, Inspector panel integration, full undo/redo support, and connection selection highlighting
 - CON-4 [mvp] Reconnect endpoints by dragging — owner: unassigned — status: todo
 - CON-5 [mvp] Insert note on connector (split into two) — owner: unassigned — status: todo
 
