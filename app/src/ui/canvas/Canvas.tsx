@@ -62,11 +62,46 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
   } | null>(null)
   const [editing, setEditing] = useState<{ noteId: string, text: string } | null>(null)
   const [cursor, setCursor] = useState<string>('default')
+  const [movementMode, setMovementMode] = useState<boolean>(false)
   const lastClickTime = useRef<number>(0)
   const lastClickPos = useRef<Point>({ x: 0, y: 0 })
 
+  // For continuous movement tracking
+  const pressedKeys = useRef<Set<string>>(new Set())
+  const movementInterval = useRef<number | null>(null)
+
   // For undo/redo support during continuous operations
   const initialNoteStates = useRef<Map<string, Note> | null>(null)
+
+  // Continuous movement function
+  const performContinuousMovement = () => {
+    if (!movementMode || selectedIds.length === 0 || !onNotesChange) return
+
+    let dx = 0, dy = 0
+    const moveDistance = 2 // Base movement speed for continuous mode
+
+    if (pressedKeys.current.has('ArrowLeft')) dx = -moveDistance
+    if (pressedKeys.current.has('ArrowRight')) dx = moveDistance
+    if (pressedKeys.current.has('ArrowUp')) dy = -moveDistance
+    if (pressedKeys.current.has('ArrowDown')) dy = moveDistance
+
+    if (dx !== 0 || dy !== 0) {
+      const updatedNotes = notes.map(note => {
+        if (selectedIds.includes(note.id)) {
+          return {
+            ...note,
+            frame: {
+              ...note.frame,
+              x: note.frame.x + dx,
+              y: note.frame.y + dy
+            }
+          }
+        }
+        return note
+      })
+      onNotesChange(updatedNotes)
+    }
+  }
 
   const createNote = (worldPos: Point, text: string = 'New note') => {
     if (!onExecuteCommand) return
@@ -150,9 +185,16 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
   useEffect(() => {
     resize()
     window.addEventListener('resize', resize)
-    const onKeyDown = (e: KeyboardEvent) => { 
+    const onKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Space') setSpacePan(true)
-      
+
+      // Movement mode toggle (M key)
+      if (e.code === 'KeyM' && !editing) {
+        e.preventDefault()
+        setMovementMode(prev => !prev)
+        return
+      }
+
       // Select All (Ctrl/Cmd + A)
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyA' && !editing) {
         e.preventDefault()
@@ -160,26 +202,40 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
         onSelectionChange?.(allIds)
         return
       }
-      
-      // Arrow key nudging
+
+      // Arrow key handling - different behavior in movement mode vs normal mode
       if (!editing && selectedIds.length > 0 && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
         e.preventDefault()
-        const nudgeDistance = e.shiftKey ? 10 : 1
-        let dx = 0, dy = 0
 
-        switch (e.code) {
-          case 'ArrowLeft': dx = -nudgeDistance; break
-          case 'ArrowRight': dx = nudgeDistance; break
-          case 'ArrowUp': dy = -nudgeDistance; break
-          case 'ArrowDown': dy = nudgeDistance; break
-        }
+        if (movementMode) {
+          // Continuous movement mode
+          if (!pressedKeys.current.has(e.code)) {
+            pressedKeys.current.add(e.code)
 
-        if (onExecuteCommand) {
-          const movements = new Map<string, { dx: number; dy: number }>()
-          selectedIds.forEach(id => {
-            movements.set(id, { dx, dy })
-          })
-          onExecuteCommand(new MoveNotesCommand(movements))
+            // Start continuous movement interval if this is the first arrow key
+            if (pressedKeys.current.size === 1 && !movementInterval.current) {
+              movementInterval.current = window.setInterval(performContinuousMovement, 16) // ~60 FPS
+            }
+          }
+        } else {
+          // Normal nudge mode (existing behavior)
+          const nudgeDistance = e.shiftKey ? 10 : 1
+          let dx = 0, dy = 0
+
+          switch (e.code) {
+            case 'ArrowLeft': dx = -nudgeDistance; break
+            case 'ArrowRight': dx = nudgeDistance; break
+            case 'ArrowUp': dy = -nudgeDistance; break
+            case 'ArrowDown': dy = nudgeDistance; break
+          }
+
+          if (onExecuteCommand) {
+            const movements = new Map<string, { dx: number; dy: number }>()
+            selectedIds.forEach(id => {
+              movements.set(id, { dx, dy })
+            })
+            onExecuteCommand(new MoveNotesCommand(movements))
+          }
         }
         return
       }
@@ -201,16 +257,40 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
         deleteSelectedNotes()
       }
     }
-    const onKeyUp = (e: KeyboardEvent) => { if (e.code === 'Space') setSpacePan(false) }
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') setSpacePan(false)
+
+      // Handle arrow key release in movement mode
+      if (movementMode && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
+        pressedKeys.current.delete(e.code)
+
+        // Stop continuous movement when all arrow keys are released
+        if (pressedKeys.current.size === 0 && movementInterval.current) {
+          clearInterval(movementInterval.current)
+          movementInterval.current = null
+
+          // Call onDragEnd to create a single undo/redo entry for the entire movement session
+          if (onDragEnd) {
+            onDragEnd()
+          }
+        }
+      }
+    }
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('keyup', onKeyUp)
     return () => {
       window.removeEventListener('resize', resize)
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)
+
+      // Clean up movement interval
+      if (movementInterval.current) {
+        clearInterval(movementInterval.current)
+        movementInterval.current = null
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [movementMode, selectedIds, onExecuteCommand, onDragEnd, onNotesChange, notes])
 
   const draw = () => {
     const c = canvasRef.current
@@ -305,9 +385,13 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
       const r = rectToScreen(transform, n.frame)
       // note fill
       const isSelected = selectedIds.includes(n.id)
-      ctx.fillStyle = n.faded ? 'rgba(250,250,250,0.35)' : '#fff'
-      ctx.strokeStyle = isSelected ? '#4aa3ff' : 'rgba(0,0,0,0.2)'
-      ctx.lineWidth = isSelected ? 2 : 1
+      const isMovementModeActive = movementMode && isSelected
+
+      ctx.fillStyle = n.faded ? 'rgba(250,250,250,0.35)' :
+                      isMovementModeActive ? 'rgba(74,163,255,0.1)' : '#fff'
+      ctx.strokeStyle = isMovementModeActive ? '#4aa3ff' :
+                        isSelected ? '#4aa3ff' : 'rgba(0,0,0,0.2)'
+      ctx.lineWidth = isMovementModeActive ? 3 : isSelected ? 2 : 1
       const radius = 8
       roundRect(ctx, r.x, r.y, r.w, r.h, radius)
       ctx.fill()
@@ -530,27 +614,27 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
         setMarquee({ ...marquee, end: curr })
       }
       
-      // Update cursor based on hover
+      // Update cursor based on hover and movement mode
       if (!panning && !dragging) {
-        let newCursor = 'default'
+        let newCursor = movementMode ? 'crosshair' : 'default'
         if (selectedIds.length === 1) {
           const selectedNote = notes.find(n => n.id === selectedIds[0])
           if (selectedNote) {
             const handle = hitTestResizeHandle(selectedNote, currWorld, 12 / transform.scale)
             if (handle === 'se') newCursor = 'se-resize'
-            else if (handle === 'e') newCursor = 'e-resize'  
+            else if (handle === 'e') newCursor = 'e-resize'
             else if (handle === 's') newCursor = 's-resize'
             else {
               const hit = hitTest(notes, currWorld)
-              if (hit) newCursor = 'move'
+              if (hit) newCursor = movementMode ? 'move' : 'move'
             }
           } else {
             const hit = hitTest(notes, currWorld)
-            if (hit) newCursor = 'move'
+            if (hit) newCursor = movementMode ? 'move' : 'move'
           }
         } else {
           const hit = hitTest(notes, currWorld)
-          if (hit) newCursor = 'move'
+          if (hit) newCursor = movementMode ? 'move' : 'move'
         }
         setCursor(newCursor)
       }
@@ -602,7 +686,7 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
       window.removeEventListener('mouseup', onUp)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [panning, dragging, editing, transform, notes, connections, selectedIds, onNotesChange, onSelectionChange, onConnectionsChange])
+  }, [panning, dragging, editing, transform, notes, connections, selectedIds, onNotesChange, onSelectionChange, onConnectionsChange, movementMode])
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}>
@@ -656,6 +740,11 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
       })()}
       <div style={{ position: 'absolute', left: 12, bottom: 12, color: '#fff', fontSize: 12, opacity: 0.8 }}>
         {Math.round(transform.scale * 100)}%
+        {movementMode && (
+          <span style={{ marginLeft: 8, color: '#4aa3ff', fontWeight: 'bold' }}>
+            MOVEMENT MODE (M)
+          </span>
+        )}
       </div>
     </div>
   )

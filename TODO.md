@@ -126,7 +126,7 @@ Status: **Enhanced MVP with Production Improvements**. Core functionality comple
 - PRN-1 [mvp] Native print dialog; scale‑to‑fit; posterize — owner: unassigned — status: todo
 
 ### 13) Undo / Redo
-- UNDO-1 [mvp] Command stack; coalesce text edits — owner: unassigned — status: todo
+- UNDO-1 [mvp] Command stack; coalesce text edits — owner: @amp — status: done
 - UNDO-2 [mvp] Operations: move, style change, connections, stacks, shapes — owner: unassigned — status: todo
 
 ### 14) Theming & Dark Mode
