@@ -28,3 +28,28 @@ export async function clearRecentFiles(): Promise<void> {
   return invoke('clear_recent_files')
 }
 
+// Autosave operations
+export async function autosaveDocument(doc: any, filePath: string): Promise<any> {
+  return invoke('autosave_document', { args: { doc, file_path: filePath } })
+}
+
+export async function setDocumentDirty(isDirty: boolean): Promise<void> {
+  return invoke('set_document_dirty', { isDirty })
+}
+
+export async function setCurrentDocumentPath(filePath: string): Promise<void> {
+  return invoke('set_current_document_path', { filePath })
+}
+
+export async function getAutosaveStatus(): Promise<any> {
+  return invoke('get_autosave_status')
+}
+
+export async function checkRecoveryFiles(): Promise<any[]> {
+  return invoke('check_recovery_files')
+}
+
+export async function recoverFromAutosave(recoveryPath: string): Promise<any> {
+  return invoke('recover_from_autosave', { recoveryPath })
+}
+

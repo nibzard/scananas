@@ -26,6 +26,8 @@ tauri-plugin-log = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 zip = "0.6"
+tokio = { version = "1", features = ["time"] }
+chrono = { version = "0.4", features = ["serde"] }
 
 [target.'cfg(debug_assertions)'.dependencies]
 tauri-plugin-devtools = "2"

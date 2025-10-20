@@ -3,12 +3,21 @@ import { Canvas } from './canvas/Canvas'
 import { Inspector } from './Inspector'
 import { HelpOverlay } from './HelpOverlay'
 import { RecentFiles } from './RecentFiles'
+import { RecoveryDialog } from './RecoveryDialog'
+import { AutosaveIndicator } from './AutosaveIndicator'
 import type { BoardDocument } from '../model/types'
 import { makeEmptyDoc } from '../state'
 import { useCommandStack } from '../hooks/useCommandStack'
-import { openDocument, openSpecificDocument, saveDocument } from '../bridge/tauri'
+import { useAutosave } from '../hooks/useAutosave'
+import { openDocument, openSpecificDocument, saveDocument, checkRecoveryFiles } from '../bridge/tauri'
 import { exportToPNG, exportToTXT, downloadFile, downloadText } from '../export/canvasExport'
 import { UpdateNotesCommand, UpdateConnectionsCommand } from '../state/commands'
+
+interface AutosaveInfo {
+  original_path: string
+  recovery_path: string
+  timestamp: string
+}
 
 export function App() {
   const initialDoc: BoardDocument = React.useMemo(() => ({
@@ -43,16 +52,46 @@ export function App() {
 
   const [selection, setSelection] = React.useState<string[]>([])
   const [showHelp, setShowHelp] = React.useState(false)
+  const [currentFilePath, setCurrentFilePath] = React.useState<string | null>(null)
+  const [recoveryFiles, setRecoveryFiles] = React.useState<AutosaveInfo[]>([])
+  const [showRecoveryDialog, setShowRecoveryDialog] = React.useState(false)
+  const [isDirty, setIsDirty] = React.useState(false)
+
+  // Initialize autosave functionality
+  const {
+    checkForRecoveryFiles,
+    forceAutosave
+  } = useAutosave(currentDoc, currentFilePath, isDirty)
+
+  // Check for recovery files on startup
+  React.useEffect(() => {
+    const checkRecovery = async () => {
+      try {
+        const files = await checkForRecoveryFiles()
+        if (files.length > 0) {
+          setRecoveryFiles(files)
+          setShowRecoveryDialog(true)
+        }
+      } catch (error) {
+        console.warn('Failed to check recovery files:', error)
+      }
+    }
+
+    checkRecovery()
+  }, [checkForRecoveryFiles])
 
   // Clear temp state when document changes via commands
   React.useEffect(() => {
     setTempDoc(null)
+    setIsDirty(true) // Mark document as dirty when it changes
   }, [doc])
 
   const onOpen = async () => {
     try {
       const opened = await openDocument()
       setDocument(opened)
+      setCurrentFilePath(null) // Reset file path since we used "Open" dialog
+      setIsDirty(false)
     } catch (e) {
       console.warn('Open cancelled or failed', e)
     }
@@ -62,6 +101,8 @@ export function App() {
     try {
       const opened = await openSpecificDocument(filePath)
       setDocument(opened)
+      setCurrentFilePath(filePath)
+      setIsDirty(false)
     } catch (e) {
       console.warn('Failed to open recent file:', e)
     }
@@ -69,7 +110,9 @@ export function App() {
 
   const onSave = async () => {
     try {
-      await saveDocument(doc)
+      const savedPath = await saveDocument(doc)
+      setCurrentFilePath(savedPath)
+      setIsDirty(false)
     } catch (e) {
       console.warn('Save cancelled or failed', e)
     }
@@ -97,6 +140,32 @@ export function App() {
     }
   }
 
+  const handleRecovery = (recoveredDoc: BoardDocument, originalPath: string) => {
+    setDocument(recoveredDoc)
+    setCurrentFilePath(originalPath)
+    setIsDirty(true) // Mark as dirty since it's recovered
+    setShowRecoveryDialog(false)
+    setRecoveryFiles([])
+  }
+
+  const handleDismissRecovery = () => {
+    setShowRecoveryDialog(false)
+    setRecoveryFiles([])
+  }
+
+  const handleDeleteAllRecoveryFiles = () => {
+    // This would delete all recovery files
+    // For now, just dismiss the dialog
+    setShowRecoveryDialog(false)
+    setRecoveryFiles([])
+  }
+
+  const onForceAutosave = () => {
+    if (currentFilePath) {
+      forceAutosave()
+    }
+  }
+
   // Global keyboard shortcuts
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -104,6 +173,11 @@ export function App() {
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyS') {
         e.preventDefault()
         onSave()
+      }
+      // Ctrl/Cmd + Shift + S to force autosave
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.code === 'KeyS') {
+        e.preventDefault()
+        onForceAutosave()
       }
       // Ctrl/Cmd + O to open
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyO') {
@@ -120,10 +194,10 @@ export function App() {
         setShowHelp(true)
       }
     }
-    
+
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [onSave, onOpen])
+  }, [onSave, onOpen, onForceAutosave])
 
   return (
     <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -131,6 +205,14 @@ export function App() {
         <button onClick={onOpen} style={btnStyle}>Open…</button>
         <RecentFiles onOpenRecentFile={onOpenRecentFile} />
         <button onClick={onSave} style={btnStyle}>Save As…</button>
+        {currentFilePath && (
+          <>
+            <div style={{ height: 24, width: 1, background: '#333', margin: '0 4px' }} />
+            <button onClick={onForceAutosave} style={{ ...btnStyle, background: '#28a745', fontSize: '12px' }} title="Force Autosave (Ctrl+Shift+S)">
+              💾 Autosave Now
+            </button>
+          </>
+        )}
         <div style={{ height: 24, width: 1, background: '#333', margin: '0 4px' }} />
         <button onClick={undo} disabled={!canUndo} style={{ ...btnStyle, opacity: canUndo ? 1 : 0.5 }} title={`Undo ${undoDescription || ''} (Ctrl+Z)`}>
           ↶ Undo
@@ -145,7 +227,17 @@ export function App() {
           <button onClick={() => setShowHelp(true)} style={{ ...btnStyle, background: '#333' }}>
             Help (?)
           </button>
-          <div style={{ opacity: 0.7, fontSize: 12 }}>schema v{doc.schemaVersion}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: 0.7, fontSize: 12 }}>
+            <span>schema v{doc.schemaVersion}</span>
+            {currentFilePath && (
+              <>
+                <span>|</span>
+                <span style={{ color: isDirty ? '#ffa500' : '#4caf50' }}>
+                  {isDirty ? '●' : '○'} {currentFilePath.split('/').pop() || currentFilePath}
+                </span>
+              </>
+            )}
+          </div>
         </div>
       </div>
       <div style={{ flex: 1, display: 'flex' }}>
@@ -226,6 +318,15 @@ export function App() {
         />
       </div>
       <HelpOverlay isVisible={showHelp} onClose={() => setShowHelp(false)} />
+      <AutosaveIndicator />
+      {showRecoveryDialog && (
+        <RecoveryDialog
+          recoveryFiles={recoveryFiles}
+          onRecover={handleRecovery}
+          onDismiss={handleDismissRecovery}
+          onDeleteAll={handleDeleteAllRecoveryFiles}
+        />
+      )}
     </div>
   )
 }
