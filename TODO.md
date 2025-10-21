@@ -32,6 +32,15 @@ Status: **Enhanced MVP with Production Improvements + Critical Fixes**. Core fun
 - ✅ **Interactive Features**: Delete/Backspace support, magnetic behavior toggle for note snapping, optional shape labels
 - ✅ **Visual Design**: Subtle styling with transparency, selection highlighting, professional appearance
 
+**NEW: Search & Selection System (SRCH-1 & SRCH-2 Completed):**
+- ✅ **Incremental Search**: Real-time search across notes and connection labels with case-insensitive filtering
+- ✅ **Search Dialog**: Modal dialog with keyboard navigation, result highlighting, and search statistics
+- ✅ **Keyboard Shortcuts**: Ctrl+F to open search, Escape to close, Enter/Tab navigation between results
+- ✅ **Connected Cluster Selection**: Ctrl+G to select all notes and connections connected to current selection
+- ✅ **Graph Traversal**: Intelligent algorithm to identify connected components in the note graph
+- ✅ **Visual Feedback**: Highlighted search results and selected clusters with clear visual distinction
+- ✅ **Search Utilities**: Comprehensive search functions with integration into main application workflow
+
 **Architecture & Foundation:**
 - ✅ Tauri v2 + React setup with TypeScript/Rust type synchronization
 - ✅ Canvas rendering with proper transforms and hit testing
@@ -100,18 +109,18 @@ Status: **Enhanced MVP with Production Improvements + Critical Fixes**. Core fun
 - Full MVP note-taking functionality working
 - Advanced undo/redo system implemented
 - File I/O with dual format support (.fim/.json)
+- Search and selection system with connected cluster analysis
 
 ### 🚧 **High Priority Missing MVP Features:**
-1. **Export System** (EXP-1, EXP-2, EXP-3) - PDF, PNG, and text format exports
-2. **Background Shapes** (SHP-1, SHP-2, SHP-3) - Visual grouping with magnetic behavior  
+1. **Export System** (EXP-1) - PDF format exports (PNG export completed)
+2. **Background Shapes** (SHP-2) - Magnetic move behavior for shapes
 3. **Stacks System** (STK-1, STK-2, STK-3) - Hierarchical note organization
-4. **Search Functionality** (SRCH-1, SRCH-2) - Find text and select connected clusters
-5. **Performance Optimization** (CAN-2, CAN-3, PERF-1) - Spatial indexing for large documents
+4. **Performance Optimization** (CAN-2, CAN-3, PERF-1) - Spatial indexing for large documents
 
 ### 🎯 **Recommended Next Steps:**
-1. Implement export functionality (highest user value)
-2. Add background shapes for visual organization
-3. Build search capabilities
+1. Complete PDF export functionality (highest user value - PNG export completed)
+2. Complete background shapes with magnetic behavior
+3. Build stacks system for hierarchical organization
 4. Optimize rendering performance
 5. Add accessibility features
 
@@ -201,8 +210,8 @@ Status: **Enhanced MVP with Production Improvements + Critical Fixes**. Core fun
 - LNK-1 [mvp] Detect and open http(s)/mailto/file links (Cmd+Click) — owner: unassigned — status: todo
 
 ### 10) Search & Selection Utilities
-- SRCH-1 [mvp] Incremental find (notes + connection labels) — owner: unassigned — status: todo
-- SRCH-2 [mvp] Select Connected Cluster — owner: unassigned — status: todo
+- SRCH-1 [mvp] Incremental find (notes + connection labels) — owner: unassigned — status: done (completed 2025-10-21) ✅ **COMPLETED**: Real-time search across notes and connection labels with search dialog, Ctrl+F shortcut, case-insensitive filtering, keyboard navigation, and result highlighting
+- SRCH-2 [mvp] Select Connected Cluster — owner: unassigned — status: done (completed 2025-10-21) ✅ **COMPLETED**: Connected cluster selection with Ctrl+G shortcut, intelligent graph traversal algorithm, visual feedback for selected clusters, and seamless integration with search functionality
 - SRCH-3 [mvp] Select by Style / Select by Fade — owner: unassigned — status: todo
 
 ### 11) Zoom, Pan, Focus
@@ -212,7 +221,7 @@ Status: **Enhanced MVP with Production Improvements + Critical Fixes**. Core fun
 
 ### 12) Export & Print
 - EXP-1 [mvp] PDF export (vector) with options — owner: unassigned — status: todo
-- EXP-2 [mvp] PNG export (1x/2x/3x DPI) — owner: unassigned — status: todo
+- EXP-2 [mvp] PNG export (1x/2x/3x DPI) — owner: unassigned — status: done (completed 2025-10-21) ✅ **COMPLETED**: PNG export with DPI scaling (1x/2x/3x), native file dialogs, proper error handling, and integration with existing canvas export functionality
 - ✅ EXP-3 [mvp] TXT/RTF/OPML export per ordering heuristics — owner: niko — status: completed — **Complete export system with intelligent text ordering (spatial, connections, hierarchical), Tauri backend commands, and UI integration**
 - PRN-1 [mvp] Native print dialog; scale‑to‑fit; posterize — owner: unassigned — status: todo
 
