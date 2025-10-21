@@ -2,7 +2,41 @@
 
 Status: **Enhanced MVP with Production Improvements + Critical Fixes**. Core functionality complete plus major enhancements: Tauri v2 migration, enhanced error handling, state management, DevTools integration, security hardening, and critical stability fixes. Ready for advanced features.
 
-## 🎉 Recently Completed (Latest Session - December 2024 + October 2025 Critical Fixes)
+## 🎉 Recently Completed (Latest Session - December 2024 + October 2025 Critical Fixes + October 2025 Shapes)
+
+**Major Infrastructure Enhancements:**
+- ✅ **Tauri v2 Migration**: Complete upgrade from v1 to v2 with modern API patterns
+- ✅ **Enhanced Error Handling**: Detailed error messages, schema validation, async command improvements
+- ✅ **State Management**: Recent files tracking (10 most recent), last save path persistence
+- ✅ **DevTools Integration**: CrabNebula DevTools for development debugging and monitoring
+- ✅ **Security & Permissions**: Proper capability definitions, restricted file system access
+- ✅ **Future-Ready Files**: Support for .fim file format alongside JSON
+
+**Core Interactive Features:**
+- ✅ **Note System**: Double-click creation, Enter/Esc editing, drag movement, resize handles (E/S/SE), Delete key
+- ✅ **Connections**: Alt+drag between notes, visual dotted lines, auto-cleanup on note delete
+- ✅ **Selection**: Click, Shift+click, marquee selection, Alt+drag subtract mode
+- ✅ **Movement Mode**: M key toggle for continuous arrow key movement at 60 FPS with visual feedback
+- ✅ **Inspector Panel**: Right sidebar with Note/Connection/Document tabs, live property editing
+- ✅ **Navigation**: Mouse wheel zoom, Space+drag pan, cursor feedback, HiDPI support
+- ✅ **File I/O**: Enhanced JSON open/save with native dialogs, schema versioning, recent files
+- ✅ **Comprehensive Undo/Redo**: Full command pattern implementation for all operations (movement, resize, connections, style changes) with smart continuous operation tracking
+
+**NEW: Background Shapes System (SHP-1 & SHP-3 Completed):**
+- ✅ **Shape Creation**: "⬜ Shape" toolbar button creates rounded rectangles with customizable properties
+- ✅ **Canvas Rendering**: Proper z-ordering with shapes rendering behind notes, rounded corners with adjustable radius
+- ✅ **Shape Selection**: Click selection, Shift+click multi-select, marquee selection, visual selection highlighting
+- ✅ **Manipulation Handles**: Resize handles (SE, E, S) for shapes, drag movement with cursor feedback
+- ✅ **Inspector Integration**: Shape property panel with label editing, corner radius slider, magnetic toggle, dimensions and position controls
+- ✅ **Command System**: Full CRUD operations with undo/redo (CreateShapesCommand, DeleteShapesCommand, MoveShapesCommand, ResizeShapesCommand, UpdateShapesCommand)
+- ✅ **Interactive Features**: Delete/Backspace support, magnetic behavior toggle for note snapping, optional shape labels
+- ✅ **Visual Design**: Subtle styling with transparency, selection highlighting, professional appearance
+
+**Architecture & Foundation:**
+- ✅ Tauri v2 + React setup with TypeScript/Rust type synchronization
+- ✅ Canvas rendering with proper transforms and hit testing
+- ✅ Robust state management and component architecture
+- ✅ Production-ready build system and error handling
 
 **Major Infrastructure Enhancements:**
 - ✅ **Tauri v2 Migration**: Complete upgrade from v1 to v2 with modern API patterns
@@ -146,9 +180,9 @@ Status: **Enhanced MVP with Production Improvements + Critical Fixes**. Core fun
 - CON-5 [mvp] Insert note on connector (split into two) — owner: unassigned — status: todo
 
 ### 6) Background Shapes (Groups)
-- SHP-1 [mvp] Rect shapes with corner radius, label — owner: unassigned — status: todo
+- SHP-1 [mvp] Rect shapes with corner radius, label — owner: claude — status: completed ✅
 - SHP-2 [mvp] Magnetic move: overlap test and group translation — owner: unassigned — status: todo
-- SHP-3 [mvp] Z‑order: shapes behind notes; handles on select — owner: unassigned — status: todo
+- SHP-3 [mvp] Z‑order: shapes behind notes; handles on select — owner: claude — status: completed ✅
 
 ### 7) Stacks
 - STK-1 [mvp] Make/Unstack from selection; order by Y then X — owner: unassigned — status: todo
