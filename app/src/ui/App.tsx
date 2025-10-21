@@ -444,6 +444,7 @@ export function App() {
             notes={currentDoc.notes}
             connections={currentDoc.connections}
             shapes={currentDoc.shapes}
+            stacks={currentDoc.stacks}
             selectedIds={selection}
             onSelectionChange={setSelection}
             onExecuteCommand={executeCommand}

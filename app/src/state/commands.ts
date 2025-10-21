@@ -779,7 +779,182 @@ export class MagneticMoveCommand implements Command {
   }
 }
 
-// Stack commands for STK-1: Make/Unstack functionality
+// Stack commands for STK-1: Make/Unstack functionality and STK-2: Stack manipulation shortcuts
+
+export class AddSiblingNoteCommand implements Command {
+  description = 'Add sibling note to stack'
+  private readonly targetNoteId: ID
+  private readonly position: 'above' | 'below'
+  private readonly newNote: Note
+  private readonly stackId: ID
+  private readonly previousStack?: Stack
+
+  constructor(targetNoteId: ID, position: 'above' | 'below', stacks: Stack[]) {
+    this.targetNoteId = targetNoteId
+    this.position = position
+
+    // Find the stack that contains the target note
+    const targetStack = stacks.find(stack => stack.noteIds.includes(targetNoteId))
+    if (!targetStack) {
+      throw new Error('Target note must be in a stack')
+    }
+    this.stackId = targetStack.id
+
+    // Create the new note
+    this.newNote = {
+      id: `note_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+      text: '',
+      frame: { x: 0, y: 0, w: 200, h: 80 } // Position will be calculated in execute
+    }
+
+    // Store previous stack state for undo
+    this.previousStack = { ...targetStack }
+  }
+
+  execute(doc: BoardDocument): BoardDocument {
+    const stack = doc.stacks.find(s => s.id === this.stackId)
+    if (!stack) return doc
+
+    const targetIndex = stack.noteIds.indexOf(this.targetNoteId)
+    if (targetIndex === -1) return doc
+
+    // Calculate new position for the note
+    const targetNote = doc.notes.find(n => n.id === this.targetNoteId)
+    if (!targetNote) return doc
+
+    const spacing = stack.spacing || 10
+    const newY = targetNote.frame.y + (this.position === 'below' ? spacing : -spacing)
+
+    // Create the updated note with correct position
+    const noteWithPosition = {
+      ...this.newNote,
+      frame: {
+        ...this.newNote.frame,
+        x: targetNote.frame.x,
+        y: newY
+      },
+      stackId: this.stackId
+    }
+
+    // Update the stack noteIds array
+    const newNoteIds = [...stack.noteIds]
+    const insertIndex = this.position === 'below' ? targetIndex + 1 : targetIndex
+    newNoteIds.splice(insertIndex, 0, noteWithPosition.id)
+
+    // Update notes with new positions for all notes below insertion point
+    const updatedNotes = doc.notes.map(note => {
+      if (note.id === noteWithPosition.id) {
+        return noteWithPosition
+      }
+
+      const noteIndex = newNoteIds.indexOf(note.id)
+      const targetNoteIndex = newNoteIds.indexOf(this.targetNoteId)
+
+      // If this note is after the insertion point, shift it down
+      if (note.stackId === this.stackId && noteIndex > targetNoteIndex) {
+        return {
+          ...note,
+          frame: {
+            ...note.frame,
+            y: note.frame.y + spacing
+          }
+        }
+      }
+
+      return note
+    })
+
+    return {
+      ...doc,
+      notes: [...updatedNotes],
+      stacks: doc.stacks.map(s =>
+        s.id === this.stackId
+          ? { ...s, noteIds: newNoteIds }
+          : s
+      )
+    }
+  }
+
+  undo(doc: BoardDocument): BoardDocument {
+    if (!this.previousStack) return doc
+
+    // Remove the new note and restore the previous stack
+    return {
+      ...doc,
+      notes: doc.notes.filter(n => n.id !== this.newNote.id),
+      stacks: doc.stacks.map(s =>
+        s.id === this.stackId
+          ? this.previousStack!
+          : s
+      )
+    }
+  }
+}
+
+export class ChangeIndentCommand implements Command {
+  description = 'Change note indent level in stack'
+  private readonly noteId: ID
+  private readonly direction: 'indent' | 'outdent'
+  private readonly previousIndentLevels?: Record<ID, number>
+  private readonly stackId: ID
+
+  constructor(noteId: ID, direction: 'indent' | 'outdent', stacks: Stack[]) {
+    this.noteId = noteId
+    this.direction = direction
+
+    // Find the stack that contains the target note
+    const targetStack = stacks.find(stack => stack.noteIds.includes(noteId))
+    if (!targetStack) {
+      throw new Error('Target note must be in a stack')
+    }
+    this.stackId = targetStack.id
+
+    // Store current indent levels for undo
+    this.previousIndentLevels = targetStack.indentLevels ? { ...targetStack.indentLevels } : {}
+  }
+
+  execute(doc: BoardDocument): BoardDocument {
+    const stack = doc.stacks.find(s => s.id === this.stackId)
+    if (!stack) return doc
+
+    const currentIndentLevels = stack.indentLevels || {}
+    const currentLevel = currentIndentLevels[this.noteId] || 0
+
+    let newLevel: number
+    if (this.direction === 'indent') {
+      newLevel = currentLevel + 1
+    } else {
+      newLevel = Math.max(0, currentLevel - 1)
+    }
+
+    const updatedIndentLevels = {
+      ...currentIndentLevels,
+      [this.noteId]: newLevel
+    }
+
+    return {
+      ...doc,
+      stacks: doc.stacks.map(s =>
+        s.id === this.stackId
+          ? { ...s, indentLevels: updatedIndentLevels }
+          : s
+      )
+    }
+  }
+
+  undo(doc: BoardDocument): BoardDocument {
+    if (!this.previousIndentLevels) return doc
+
+    return {
+      ...doc,
+      stacks: doc.stacks.map(s =>
+        s.id === this.stackId
+          ? { ...s, indentLevels: this.previousIndentLevels }
+          : s
+      )
+    }
+  }
+}
 
 export class CreateStackCommand implements Command {
   description = 'Create stack'

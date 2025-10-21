@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import type { Note, Rect, Point, Connection, BackgroundShape, ID } from '../../model/types'
+import type { Note, Rect, Point, Connection, BackgroundShape, Stack, ID } from '../../model/types'
 import type { Command } from '../../state/commands'
 import { parseMarkdown, type MarkdownSegment } from '../../utils/markdown'
 import { SearchResult, findConnectedCluster } from '../../utils/search'
@@ -21,6 +21,8 @@ import {
   ResizeShapesCommand,
   UpdateShapesCommand,
   MagneticMoveCommand,
+  AddSiblingNoteCommand,
+  ChangeIndentCommand,
   CreateStackCommand,
   UnstackCommand
 } from '../../state/commands'
@@ -29,6 +31,7 @@ type Props = {
   notes: Note[]
   connections?: Connection[]
   shapes?: BackgroundShape[]
+  stacks?: Stack[]
   selectedIds?: string[]
   onSelectionChange?: (ids: string[]) => void
   onExecuteCommand?: (command: Command) => void
@@ -61,7 +64,7 @@ function rectToScreen(t: Transform, r: Rect) {
   return { x: topLeft.x, y: topLeft.y, w: r.w * t.scale, h: r.h * t.scale }
 }
 
-export function Canvas({ notes, connections = [], shapes = [], selectedIds = [], onSelectionChange, onExecuteCommand, onNotesChange, onConnectionsChange, onShapesChange, onDragEnd, background = '#202124', highlightedSearchResult }: Props) {
+export function Canvas({ notes, connections = [], shapes = [], stacks = [], selectedIds = [], onSelectionChange, onExecuteCommand, onNotesChange, onConnectionsChange, onShapesChange, onDragEnd, background = '#202124', highlightedSearchResult }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const [transform, setTransform] = useState<Transform>({ scale: 1, tx: 0, ty: 0 })
   const [panning, setPanning] = useState(false)
@@ -539,6 +542,47 @@ export function Canvas({ notes, connections = [], shapes = [], selectedIds = [],
         e.preventDefault()
         finishEditingConnectionLabel(true)
       }
+      // STK-2: Enter/Cmd+Enter add sibling; Tab indent/outdent
+      if (!editing && !editingConnection && selectedIds.length === 1 && e.code === 'Enter') {
+        e.preventDefault()
+        const selectedNoteId = selectedIds[0]
+        const selectedNote = notes.find(n => n.id === selectedNoteId)
+
+        // Check if selected note is in a stack
+        if (selectedNote?.stackId && onExecuteCommand) {
+          const position = e.metaKey || e.ctrlKey ? 'above' : 'below'
+          try {
+            onExecuteCommand(new AddSiblingNoteCommand(selectedNoteId, position, stacks))
+            // Note: The command returns the new note ID, but we'd need to get it from the document state
+            // For now, we'll keep the current selection
+          } catch (error) {
+            console.error('Failed to add sibling note:', error)
+          }
+        } else {
+          // If not in a stack, start editing the note
+          startEditing(selectedNoteId)
+        }
+        return
+      }
+
+      // STK-2: Tab/Shift+Tab for indent/outdent
+      if (!editing && !editingConnection && selectedIds.length === 1 && e.code === 'Tab') {
+        e.preventDefault()
+        const selectedNoteId = selectedIds[0]
+        const selectedNote = notes.find(n => n.id === selectedNoteId)
+
+        // Check if selected note is in a stack
+        if (selectedNote?.stackId && onExecuteCommand) {
+          const direction = e.shiftKey ? 'outdent' : 'indent'
+          try {
+            onExecuteCommand(new ChangeIndentCommand(selectedNoteId, direction, stacks))
+          } catch (error) {
+            console.error('Failed to change indent:', error)
+          }
+        }
+        return
+      }
+
       if ((e.code === 'Delete' || e.code === 'Backspace') && !editing && !editingConnection && selectedIds.length > 0) {
         e.preventDefault()
         deleteSelectedNotes()
@@ -603,7 +647,7 @@ export function Canvas({ notes, connections = [], shapes = [], selectedIds = [],
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [movementMode, selectedIds, onExecuteCommand, onDragEnd, onNotesChange, onShapesChange, notes, shapes])
+  }, [movementMode, selectedIds, onExecuteCommand, onDragEnd, onNotesChange, onShapesChange, notes, shapes, stacks])
 
   const draw = () => {
     const c = canvasRef.current
@@ -1559,7 +1603,7 @@ export function Canvas({ notes, connections = [], shapes = [], selectedIds = [],
       window.removeEventListener('mouseup', onUp)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [panning, dragging, editing, transform, notes, connections, selectedIds, onNotesChange, onSelectionChange, onConnectionsChange, onShapesChange, movementMode, magneticActive, magneticAffectedNotes])
+  }, [panning, dragging, editing, transform, notes, connections, selectedIds, onNotesChange, onSelectionChange, onConnectionsChange, onShapesChange, movementMode, magneticActive, magneticAffectedNotes, stacks])
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}>
