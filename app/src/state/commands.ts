@@ -679,3 +679,72 @@ export class UpdateShapesCommand implements Command {
     }
   }
 }
+
+export class MagneticMoveCommand implements Command {
+  description = 'Magnetic shape and note movement'
+  private readonly shapeMovements: Map<string, { dx: number; dy: number }>
+  private readonly noteMovements: Map<string, { dx: number; dy: number }>
+  private readonly previousShapeStates: BackgroundShape[]
+  private readonly previousNoteStates: Note[]
+
+  constructor(
+    shapeMovements: Map<string, { dx: number; dy: number }>,
+    noteMovements: Map<string, { dx: number; dy: number }>,
+    previousShapeStates: BackgroundShape[],
+    previousNoteStates: Note[]
+  ) {
+    this.shapeMovements = shapeMovements
+    this.noteMovements = noteMovements
+    this.previousShapeStates = previousShapeStates
+    this.previousNoteStates = previousNoteStates
+  }
+
+  execute(doc: BoardDocument): BoardDocument {
+    return {
+      ...doc,
+      shapes: doc.shapes.map(shape => {
+        const movement = this.shapeMovements.get(shape.id)
+        if (movement) {
+          return {
+            ...shape,
+            frame: {
+              ...shape.frame,
+              x: shape.frame.x + movement.dx,
+              y: shape.frame.y + movement.dy
+            }
+          }
+        }
+        return shape
+      }),
+      notes: doc.notes.map(note => {
+        const movement = this.noteMovements.get(note.id)
+        if (movement) {
+          return {
+            ...note,
+            frame: {
+              ...note.frame,
+              x: note.frame.x + movement.dx,
+              y: note.frame.y + movement.dy
+            }
+          }
+        }
+        return note
+      })
+    }
+  }
+
+  undo(doc: BoardDocument): BoardDocument {
+    const shapeIdToPrevious = new Map(this.previousShapeStates.map(s => [s.id, s]))
+    const noteIdToPrevious = new Map(this.previousNoteStates.map(n => [n.id, n]))
+
+    return {
+      ...doc,
+      shapes: doc.shapes.map(shape =>
+        shapeIdToPrevious.has(shape.id) ? shapeIdToPrevious.get(shape.id)! : shape
+      ),
+      notes: doc.notes.map(note =>
+        noteIdToPrevious.has(note.id) ? noteIdToPrevious.get(note.id)! : note
+      )
+    }
+  }
+}

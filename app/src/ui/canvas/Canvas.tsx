@@ -18,7 +18,8 @@ import {
   DeleteShapesCommand,
   MoveShapesCommand,
   ResizeShapesCommand,
-  UpdateShapesCommand
+  UpdateShapesCommand,
+  MagneticMoveCommand
 } from '../../state/commands'
 
 type Props = {
@@ -79,6 +80,8 @@ export function Canvas({ notes, connections = [], shapes = [], selectedIds = [],
   const [editingConnection, setEditingConnection] = useState<{ connectionId: string, text: string, position: Point } | null>(null)
   const [cursor, setCursor] = useState<string>('default')
   const [movementMode, setMovementMode] = useState<boolean>(false)
+  const [magneticActive, setMagneticActive] = useState<boolean>(false)
+  const [magneticAffectedNotes, setMagneticAffectedNotes] = useState<string[]>([])
   const lastClickTime = useRef<number>(0)
   const lastClickPos = useRef<Point>({ x: 0, y: 0 })
 
@@ -671,12 +674,15 @@ export function Canvas({ notes, connections = [], shapes = [], selectedIds = [],
       // note fill
       const isSelected = selectedIds.includes(n.id)
       const isMovementModeActive = movementMode && isSelected
+      const isMagneticallyAffected = magneticActive && magneticAffectedNotes.includes(n.id)
 
       ctx.fillStyle = n.faded ? 'rgba(250,250,250,0.35)' :
-                      isMovementModeActive ? 'rgba(74,163,255,0.1)' : '#fff'
+                      isMovementModeActive ? 'rgba(74,163,255,0.1)' :
+                      isMagneticallyAffected ? 'rgba(255,193,7,0.15)' : '#fff'
       ctx.strokeStyle = isMovementModeActive ? '#4aa3ff' :
+                        isMagneticallyAffected ? '#ffc107' :
                         isSelected ? '#4aa3ff' : 'rgba(0,0,0,0.2)'
-      ctx.lineWidth = isMovementModeActive ? 3 : isSelected ? 2 : 1
+      ctx.lineWidth = isMovementModeActive ? 3 : isMagneticallyAffected ? 2 : isSelected ? 2 : 1
       const radius = 8
       roundRect(ctx, r.x, r.y, r.w, r.h, radius)
       ctx.fill()
@@ -749,7 +755,7 @@ export function Canvas({ notes, connections = [], shapes = [], selectedIds = [],
   useEffect(() => {
     draw()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notes, connections, shapes, transform, selectedIds])
+  }, [notes, connections, shapes, transform, selectedIds, movementMode, magneticActive, magneticAffectedNotes])
 
   // Mouse interactions
   useEffect(() => {
@@ -1047,23 +1053,51 @@ export function Canvas({ notes, connections = [], shapes = [], selectedIds = [],
           const isDraggingShape = dragging.noteIds.some(id => shapes.find(s => s.id === id))
 
           if (isDraggingShape) {
-            const updatedShapes = shapes.map(shape => {
-              if (dragging.noteIds.includes(shape.id)) {
-                const startFrame = dragging.startFrames.get(shape.id)
+            // Calculate magnetic snap offset
+            let magneticDx = dx
+            let magneticDy = dy
+
+            for (const shapeId of dragging.noteIds) {
+              const shape = shapes.find(s => s.id === shapeId)
+              if (shape && shape.magnetic !== false) {
+                const startFrame = dragging.startFrames.get(shapeId)
                 if (startFrame) {
-                  return {
-                    ...shape,
-                    frame: {
-                      ...startFrame,
-                      x: startFrame.x + dx,
-                      y: startFrame.y + dy
-                    }
+                  const currentFrame = {
+                    ...startFrame,
+                    x: startFrame.x + dx,
+                    y: startFrame.y + dy
+                  }
+                  const nearbyNotes = findNotesNearShape(notes, { ...shape, frame: currentFrame })
+                  const magneticSnap = calculateMagneticSnap(currentFrame, nearbyNotes)
+
+                  if (magneticSnap.shouldSnap) {
+                    magneticDx += magneticSnap.dx
+                    magneticDy += magneticSnap.dy
                   }
                 }
               }
-              return shape
-            })
+            }
+
+            // Check if magnetic behavior is active
+            const hasMagneticEffect = magneticDx !== dx || magneticDy !== dy
+            setMagneticActive(hasMagneticEffect)
+
+            // Apply magnetic movement to shapes and nearby notes
+            const { updatedShapes, updatedNotes, affectedNoteIds } = applyMagneticMovement(
+              shapes,
+              notes,
+              dragging.noteIds,
+              magneticDx,
+              magneticDy
+            )
+
             onShapesChange(updatedShapes)
+            setMagneticAffectedNotes(affectedNoteIds)
+
+            // Also update notes if they're affected by magnetic movement
+            if (affectedNoteIds.length > 0 && onNotesChange) {
+              onNotesChange(updatedNotes)
+            }
           }
         } else if (dragging.type === 'resize' && dragging.resizeHandle && onNotesChange) {
           const dx = currWorld.x - dragging.startWorld.x
@@ -1270,23 +1304,58 @@ export function Canvas({ notes, connections = [], shapes = [], selectedIds = [],
 
         // Handle shape undo commands
         if (dragging.type === 'move' && continuousOperationType.current === 'move' && initialNoteStates.current) {
-          const movements = new Map<string, { dx: number; dy: number }>()
+          const shapeMovements = new Map<string, { dx: number; dy: number }>()
+          const previousShapeStates: BackgroundShape[] = []
+          const previousNoteStates: Note[] = []
 
+          // Calculate shape movements and collect previous states
           dragging.noteIds.forEach(id => {
             const initialState = initialNoteStates.current!.get(id)
             const currentState = shapes.find(s => s.id === id)
+            const noteState = notes.find(n => n.id === id) // In case notes were tracked
 
             if (initialState && currentState) {
-              movements.set(id, {
-                dx: currentState.frame.x - initialState.frame.x,
-                dy: currentState.frame.y - initialState.frame.y
-              })
+              const dx = currentState.frame.x - initialState.frame.x
+              const dy = currentState.frame.y - initialState.frame.y
+
+              // Determine if this is a shape or note
+              if (shapes.find(s => s.id === id)) {
+                shapeMovements.set(id, { dx, dy })
+                previousShapeStates.push(initialState as BackgroundShape)
+              }
+
+              if (noteState) {
+                previousNoteStates.push(noteState)
+              }
+            }
+          })
+
+          // Calculate note movements for magnetically affected notes
+          const noteMovements = new Map<string, { dx: number; dy: number }>()
+          magneticAffectedNotes.forEach(noteId => {
+            const currentNote = notes.find(n => n.id === noteId)
+            if (currentNote) {
+              // Find which shape caused this note to move (simplified approach)
+              for (const shapeId of dragging.noteIds) {
+                const shapeMovement = shapeMovements.get(shapeId)
+                if (shapeMovement) {
+                  noteMovements.set(noteId, { ...shapeMovement })
+                  break
+                }
+              }
             }
           })
 
           // Only create command if there was actual movement
-          if (movements.size > 0 && Array.from(movements.values()).some(m => m.dx !== 0 || m.dy !== 0)) {
-            onExecuteCommand(new MoveShapesCommand(movements))
+          if ((shapeMovements.size > 0 && Array.from(shapeMovements.values()).some(m => m.dx !== 0 || m.dy !== 0)) ||
+              (noteMovements.size > 0 && Array.from(noteMovements.values()).some(m => m.dx !== 0 || m.dy !== 0))) {
+
+            // Use MagneticMoveCommand if notes were affected, otherwise use regular MoveShapesCommand
+            if (noteMovements.size > 0) {
+              onExecuteCommand(new MagneticMoveCommand(shapeMovements, noteMovements, previousShapeStates, previousNoteStates))
+            } else {
+              onExecuteCommand(new MoveShapesCommand(shapeMovements))
+            }
           }
         } else if (dragging.type === 'resize' && continuousOperationType.current === 'resize' && initialNoteStates.current) {
           const shapeId = dragging.noteIds[0]
@@ -1310,6 +1379,10 @@ export function Canvas({ notes, connections = [], shapes = [], selectedIds = [],
       }
 
       setDragging(null)
+
+      // Reset magnetic state
+      setMagneticActive(false)
+      setMagneticAffectedNotes([])
 
       // Call onDragEnd when dragging operations complete
       if (onDragEnd && (dragging?.type === 'move' || dragging?.type === 'resize')) {
@@ -1341,7 +1414,7 @@ export function Canvas({ notes, connections = [], shapes = [], selectedIds = [],
       window.removeEventListener('mouseup', onUp)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [panning, dragging, editing, transform, notes, connections, selectedIds, onNotesChange, onSelectionChange, onConnectionsChange, movementMode])
+  }, [panning, dragging, editing, transform, notes, connections, selectedIds, onNotesChange, onSelectionChange, onConnectionsChange, onShapesChange, movementMode, magneticActive, magneticAffectedNotes])
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}>
@@ -1756,4 +1829,118 @@ function hitTestShapeResizeHandle(shape: BackgroundShape, pWorld: Point, toleran
   }
 
   return null
+}
+
+// Magnetic shape functionality
+const MAGNETIC_DISTANCE = 30 // Distance threshold for magnetic behavior in world coordinates
+
+function findNotesNearShape(notes: Note[], shape: BackgroundShape): Note[] {
+  const threshold = MAGNETIC_DISTANCE
+  const shapeBounds = shape.frame
+
+  // Expand shape bounds by threshold distance
+  const expandedBounds = {
+    x: shapeBounds.x - threshold,
+    y: shapeBounds.y - threshold,
+    w: shapeBounds.w + threshold * 2,
+    h: shapeBounds.h + threshold * 2
+  }
+
+  return notes.filter(note => {
+    const noteBounds = note.frame
+    return rectsIntersect(noteBounds, expandedBounds)
+  })
+}
+
+function calculateMagneticSnap(
+  shapeFrame: Rect,
+  notes: Note[]
+): { dx: number; dy: number; shouldSnap: boolean } {
+  if (notes.length === 0) {
+    return { dx: 0, dy: 0, shouldSnap: false }
+  }
+
+  let totalDx = 0
+  let totalDy = 0
+  let snapCount = 0
+
+  for (const note of notes) {
+    const noteBounds = note.frame
+    const shapeBounds = shapeFrame
+
+    // Calculate the distance between centers
+    const shapeCenterX = shapeBounds.x + shapeBounds.w / 2
+    const shapeCenterY = shapeBounds.y + shapeBounds.h / 2
+    const noteCenterX = noteBounds.x + noteBounds.w / 2
+    const noteCenterY = noteBounds.y + noteBounds.h / 2
+
+    const dx = noteCenterX - shapeCenterX
+    const dy = noteCenterY - shapeCenterY
+    const distance = Math.sqrt(dx * dx + dy * dy)
+
+    // If within magnetic distance, calculate snap offset
+    if (distance < MAGNETIC_DISTANCE && distance > 0) {
+      // Calculate the snap force (stronger when closer)
+      const snapForce = 1 - (distance / MAGNETIC_DISTANCE)
+      totalDx += dx * snapForce * 0.3 // 30% of distance with snap force
+      totalDy += dy * snapForce * 0.3
+      snapCount++
+    }
+  }
+
+  if (snapCount > 0) {
+    return {
+      dx: totalDx / snapCount,
+      dy: totalDy / snapCount,
+      shouldSnap: true
+    }
+  }
+
+  return { dx: 0, dy: 0, shouldSnap: false }
+}
+
+function applyMagneticMovement(
+  shapes: BackgroundShape[],
+  notes: Note[],
+  shapeIds: string[],
+  dx: number,
+  dy: number
+): { updatedShapes: BackgroundShape[]; updatedNotes: Note[]; affectedNoteIds: string[] } {
+  const updatedShapes = shapes.map(shape => {
+    if (shapeIds.includes(shape.id) && shape.magnetic !== false) {
+      const newFrame = {
+        ...shape.frame,
+        x: shape.frame.x + dx,
+        y: shape.frame.y + dy
+      }
+      return { ...shape, frame: newFrame }
+    }
+    return shape
+  })
+
+  // Find notes that should move with the shapes
+  const affectedNoteIds: string[] = []
+  const updatedNotes = notes.map(note => {
+    // Check if note is near any moving shape
+    for (const shapeId of shapeIds) {
+      const shape = shapes.find(s => s.id === shapeId)
+      if (shape && shape.magnetic !== false) {
+        const nearbyNotes = findNotesNearShape([note], { ...shape, frame: { ...shape.frame, x: shape.frame.x + dx, y: shape.frame.y + dy } })
+        if (nearbyNotes.length > 0) {
+          affectedNoteIds.push(note.id)
+          return {
+            ...note,
+            frame: {
+              ...note.frame,
+              x: note.frame.x + dx,
+              y: note.frame.y + dy
+            }
+          }
+        }
+      }
+    }
+    return note
+  })
+
+  return { updatedShapes, updatedNotes, affectedNoteIds }
 }
