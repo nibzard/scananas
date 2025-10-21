@@ -109,8 +109,8 @@ Status: **Enhanced MVP with Production Improvements**. Core functionality comple
 - CON-5 [mvp] Insert note on connector (split into two) — owner: unassigned — status: todo
 
 ### 6) Background Shapes (Groups)
-- SHP-1 [mvp] Rect shapes with corner radius, label — owner: unassigned — status: todo
-- SHP-2 [mvp] Magnetic move: overlap test and group translation — owner: unassigned — status: todo
+- SHP-1 [mvp] Rect shapes with corner radius, label — owner: niko — status: done (completed 2025-10-21) ✅ **COMPLETED**: Full rectangle shape implementation including rounded corners with configurable radius (0-50px), shape labels with centered positioning and styling, complete integration with selection system (single/marquee), Inspector panel controls for label editing and corner radius adjustment, toolbar shape creation button, comprehensive undo/redo support with all shape commands, canvas rendering with proper z-ordering (behind notes), and full hit testing for mouse interactions.
+- SHP-2 [mvp] Magnetic move: overlap test and group translation — owner: niko — status: done (completed 2025-10-21) ✅ **COMPLETED**: Full magnetic move system implementation for background shapes including overlap detection between shapes and notes, automatic magnetic snapping with configurable distance thresholds, group translation for overlapping elements, visual feedback during dragging with cursor changes and highlights, and complete command system integration with undo/redo support. The system provides smooth user experience with real-time snap detection and handles multiple overlapping scenarios.
 - SHP-3 [mvp] Z‑order: shapes behind notes; handles on select — owner: unassigned — status: todo
 
 ### 7) Stacks
