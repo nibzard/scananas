@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import type { Note, Rect, Point, Connection, BackgroundShape } from '../../model/types'
 import type { Command } from '../../state/commands'
 import { parseMarkdown, type MarkdownSegment } from '../../utils/markdown'
-import { findConnectedCluster } from '../../utils/search'
+import { SearchResult, findConnectedCluster } from '../../utils/search'
 import {
   CreateNotesCommand,
   DeleteNotesCommand,
@@ -36,6 +36,7 @@ type Props = {
   onShapesChange?: (shapes: BackgroundShape[]) => void
   onDragEnd?: () => void
   background?: string
+  highlightedSearchResult?: SearchResult | null
 }
 
 type Transform = {
@@ -58,7 +59,7 @@ function rectToScreen(t: Transform, r: Rect) {
   return { x: topLeft.x, y: topLeft.y, w: r.w * t.scale, h: r.h * t.scale }
 }
 
-export function Canvas({ notes, connections = [], shapes = [], selectedIds = [], onSelectionChange, onExecuteCommand, onNotesChange, onConnectionsChange, onShapesChange, onDragEnd, background = '#202124' }: Props) {
+export function Canvas({ notes, connections = [], shapes = [], selectedIds = [], onSelectionChange, onExecuteCommand, onNotesChange, onConnectionsChange, onShapesChange, onDragEnd, background = '#202124', highlightedSearchResult }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const [transform, setTransform] = useState<Transform>({ scale: 1, tx: 0, ty: 0 })
   const [panning, setPanning] = useState(false)
@@ -617,6 +618,11 @@ export function Canvas({ notes, connections = [], shapes = [], selectedIds = [],
       const dstNote = notes.find(n => n.id === conn.dstNoteId)
       if (!srcNote || !dstNote) continue
 
+      // SRCH-1: Check if this connection is highlighted in search
+      const isConnectionSearchHighlighted = highlightedSearchResult &&
+        highlightedSearchResult.id === conn.id &&
+        highlightedSearchResult.type === 'connection'
+
       const srcCenter = {
         x: srcNote.frame.x + srcNote.frame.w / 2,
         y: srcNote.frame.y + srcNote.frame.h / 2
@@ -630,8 +636,11 @@ export function Canvas({ notes, connections = [], shapes = [], selectedIds = [],
       const dstScreen = applyTransform(transform, dstCenter)
 
       const isSelected = selectedIds.includes(conn.id)
-      const color = conn.style?.color || (isSelected ? 'rgba(74,163,255,0.8)' : 'rgba(255,255,255,0.6)')
-      const lineWidth = (conn.style?.width || (isSelected ? 3 : 2)) * transform.scale
+      // SRCH-1: Modify color and width for search highlighting
+      const color = isConnectionSearchHighlighted ? '#fbc02d' :
+                    conn.style?.color || (isSelected ? 'rgba(74,163,255,0.8)' : 'rgba(255,255,255,0.6)')
+      const lineWidth = isConnectionSearchHighlighted ? 5 * transform.scale :
+                        (conn.style?.width || (isSelected ? 3 : 2)) * transform.scale
 
       ctx.strokeStyle = color
       ctx.fillStyle = color
@@ -752,18 +761,23 @@ export function Canvas({ notes, connections = [], shapes = [], selectedIds = [],
       const isMovementModeActive = movementMode && isSelected
       const isMagneticallyAffected = magneticActive && magneticAffectedNotes.includes(n.id)
       const isMagneticallyGrouped = magneticActive && magneticGroupedNotes.includes(n.id) // New: Check if note is overlapped/grouped
+      const isSearchHighlighted = highlightedSearchResult && highlightedSearchResult.id === n.id && highlightedSearchResult.type === 'note'
 
       // Enhanced visual feedback for SHP-2: Different colors for grouped vs proximity magnetic notes
+      // SRCH-1: Add search highlighting with yellow glow effect
       ctx.fillStyle = n.faded ? 'rgba(250,250,250,0.35)' :
+                      isSearchHighlighted ? 'rgba(255,235,59,0.3)' : // Yellow highlight for search results
                       isMovementModeActive ? 'rgba(74,163,255,0.1)' :
                       isMagneticallyGrouped ? 'rgba(220,53,69,0.15)' : // Red tint for overlapped/grouped notes
                       isMagneticallyAffected ? 'rgba(255,193,7,0.15)' : // Yellow tint for proximity magnetic notes
                       '#fff'
-      ctx.strokeStyle = isMovementModeActive ? '#4aa3ff' :
+      ctx.strokeStyle = isSearchHighlighted ? '#fbc02d' : // Bright yellow border for search results
+                        isMovementModeActive ? '#4aa3ff' :
                         isMagneticallyGrouped ? '#dc3545' : // Red border for grouped notes
                         isMagneticallyAffected ? '#ffc107' : // Yellow border for proximity magnetic notes
                         isSelected ? '#4aa3ff' : 'rgba(0,0,0,0.2)'
-      ctx.lineWidth = isMovementModeActive ? 3 :
+      ctx.lineWidth = isSearchHighlighted ? 4 : // Extra thick border for search results
+                      isMovementModeActive ? 3 :
                       isMagneticallyGrouped ? 3 : // Thicker border for grouped notes
                       isMagneticallyAffected ? 2 :
                       isSelected ? 2 : 1

@@ -3,6 +3,7 @@ import { Canvas } from './canvas/Canvas'
 import { Inspector } from './Inspector'
 import { HelpOverlay } from './HelpOverlay'
 import { SearchDialog } from './SearchDialog'
+import { IncrementalSearch } from './IncrementalSearch'
 import { RecentFiles } from './RecentFiles'
 import { RecoveryDialog } from './RecoveryDialog'
 import { AutosaveIndicator } from './AutosaveIndicator'
@@ -56,6 +57,8 @@ export function App() {
   const [selection, setSelection] = React.useState<string[]>([])
   const [showHelp, setShowHelp] = React.useState(false)
   const [showSearch, setShowSearch] = React.useState(false)
+  const [incrementalSearchActive, setIncrementalSearchActive] = React.useState(false)
+  const [highlightedSearchResult, setHighlightedSearchResult] = React.useState<SearchResult | null>(null)
   const [currentFilePath, setCurrentFilePath] = React.useState<string | null>(null)
   const [recoveryFiles, setRecoveryFiles] = React.useState<AutosaveInfo[]>([])
   const [showRecoveryDialog, setShowRecoveryDialog] = React.useState(false)
@@ -246,6 +249,25 @@ export function App() {
     setSelection(resultIds)
   }
 
+  // Incremental search handlers
+  const handleIncrementalSearchResultSelect = (result: SearchResult) => {
+    setSelection([result.id])
+    setHighlightedSearchResult(null)
+  }
+
+  const handleIncrementalSearchHighlight = (result: SearchResult | null) => {
+    setHighlightedSearchResult(result)
+  }
+
+  const handleIncrementalSearchActivate = () => {
+    setIncrementalSearchActive(true)
+  }
+
+  const handleIncrementalSearchDeactivate = () => {
+    setIncrementalSearchActive(false)
+    setHighlightedSearchResult(null)
+  }
+
   // Global keyboard shortcuts
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -270,8 +292,13 @@ export function App() {
         e.preventDefault()
         onOpen()
       }
-      // Ctrl/Cmd + F to search
-      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyF') {
+      // Ctrl/Cmd + F for incremental search
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyF' && !e.shiftKey) {
+        e.preventDefault()
+        setIncrementalSearchActive(true)
+      }
+      // Ctrl/Cmd + Shift + F for search dialog
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.code === 'KeyF') {
         e.preventDefault()
         setShowSearch(true)
       }
@@ -436,6 +463,7 @@ export function App() {
               // When drag ends, clear the temporary state
               setTempDoc(null)
             }}
+            highlightedSearchResult={highlightedSearchResult}
           />
         </div>
         <Inspector
@@ -527,6 +555,15 @@ export function App() {
         connections={currentDoc.connections}
         onResultSelect={handleSearchResultSelect}
         onMultiSelect={handleSearchMultiSelect}
+      />
+      <IncrementalSearch
+        notes={currentDoc.notes}
+        connections={currentDoc.connections}
+        isActive={incrementalSearchActive}
+        onActivate={handleIncrementalSearchActivate}
+        onDeactivate={handleIncrementalSearchDeactivate}
+        onResultSelect={handleIncrementalSearchResultSelect}
+        onResultHighlight={handleIncrementalSearchHighlight}
       />
       <AutosaveIndicator />
       {showRecoveryDialog && (
