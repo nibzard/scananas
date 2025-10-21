@@ -2,6 +2,7 @@ import React from 'react'
 import { Canvas } from './canvas/Canvas'
 import { Inspector } from './Inspector'
 import { HelpOverlay } from './HelpOverlay'
+import { SearchDialog } from './SearchDialog'
 import { RecentFiles } from './RecentFiles'
 import { RecoveryDialog } from './RecoveryDialog'
 import { AutosaveIndicator } from './AutosaveIndicator'
@@ -11,7 +12,8 @@ import { useCommandStack } from '../hooks/useCommandStack'
 import { useAutosave } from '../hooks/useAutosave'
 import { openDocument, openSpecificDocument, saveDocument, checkRecoveryFiles, exportDocumentAsText } from '../bridge/tauri'
 import { exportToPNG, exportToTXT, exportToPDF, exportToRTF, exportToOPML, downloadFile, downloadText } from '../export/canvasExport'
-import { UpdateNotesCommand, UpdateConnectionsCommand, CreateShapesCommand, UpdateShapesCommand } from '../state/commands'
+import { UpdateNotesCommand, UpdateConnectionsCommand, CreateShapesCommand, UpdateShapesCommand, SearchCommand } from '../state/commands'
+import { SearchResult, findConnectedCluster } from '../utils/search'
 
 interface AutosaveInfo {
   original_path: string
@@ -53,6 +55,7 @@ export function App() {
 
   const [selection, setSelection] = React.useState<string[]>([])
   const [showHelp, setShowHelp] = React.useState(false)
+  const [showSearch, setShowSearch] = React.useState(false)
   const [currentFilePath, setCurrentFilePath] = React.useState<string | null>(null)
   const [recoveryFiles, setRecoveryFiles] = React.useState<AutosaveInfo[]>([])
   const [showRecoveryDialog, setShowRecoveryDialog] = React.useState(false)
@@ -216,9 +219,30 @@ export function App() {
     }
   }
 
+  // Search handlers
+  const handleSearchResultSelect = (result: SearchResult) => {
+    setSelection([result.id])
+
+    // Pan camera to the result position
+    if (result.position) {
+      // This will need to be implemented in the Canvas component
+      // For now, just selecting the item
+    }
+  }
+
+  const handleSearchMultiSelect = (resultIds: string[]) => {
+    setSelection(resultIds)
+  }
+
   // Global keyboard shortcuts
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if we're in an input field
+      const target = e.target as HTMLElement
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        return
+      }
+
       // Ctrl/Cmd + S to save
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyS') {
         e.preventDefault()
@@ -233,6 +257,11 @@ export function App() {
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyO') {
         e.preventDefault()
         onOpen()
+      }
+      // Ctrl/Cmd + F to search
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyF') {
+        e.preventDefault()
+        setShowSearch(true)
       }
       // ? or F1 for help
       if (e.code === 'Slash' && e.shiftKey) { // ? key
@@ -479,6 +508,14 @@ export function App() {
         />
       </div>
       <HelpOverlay isVisible={showHelp} onClose={() => setShowHelp(false)} />
+      <SearchDialog
+        isVisible={showSearch}
+        onClose={() => setShowSearch(false)}
+        notes={currentDoc.notes}
+        connections={currentDoc.connections}
+        onResultSelect={handleSearchResultSelect}
+        onMultiSelect={handleSearchMultiSelect}
+      />
       <AutosaveIndicator />
       {showRecoveryDialog && (
         <RecoveryDialog

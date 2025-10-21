@@ -448,6 +448,36 @@ export class UpdateConnectionEndpointsCommand implements Command {
   }
 }
 
+// Search command for highlighting search results (doesn't modify document)
+export class SearchCommand implements Command {
+  description = 'Search for text'
+  readonly isSelectionCommand = true // Mark as selection-only command
+
+  constructor(
+    private readonly searchResults: string[],
+    private readonly previousSelection: string[]
+  ) {}
+
+  execute(doc: BoardDocument): BoardDocument {
+    // Search command doesn't modify the document, just returns it
+    // The actual selection is handled by the component state
+    return doc
+  }
+
+  undo(doc: BoardDocument): BoardDocument {
+    // No document modification to undo
+    return doc
+  }
+
+  canCoalesceWith(command: Command): boolean {
+    return command instanceof SearchCommand
+  }
+
+  coalesce(command: SearchCommand): SearchCommand {
+    return new SearchCommand(command.searchResults, this.previousSelection)
+  }
+}
+
 export class InsertNoteOnConnectionCommand implements Command {
   description = 'Insert note on connection'
   private readonly originalConnection: Connection

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import type { Note, Rect, Point, Connection, BackgroundShape } from '../../model/types'
 import type { Command } from '../../state/commands'
 import { parseMarkdown, type MarkdownSegment } from '../../utils/markdown'
+import { findConnectedCluster } from '../../utils/search'
 import {
   CreateNotesCommand,
   DeleteNotesCommand,
@@ -426,6 +427,20 @@ export function Canvas({ notes, connections = [], shapes = [], selectedIds = [],
         e.preventDefault()
         const allIds = notes.map(n => n.id)
         onSelectionChange?.(allIds)
+        return
+      }
+
+      // Select Connected Cluster (Ctrl/Cmd + G)
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyG' && !editing && !editingConnection) {
+        e.preventDefault()
+        if (selectedIds.length === 1) {
+          const selectedNoteId = selectedIds[0]
+          // Check if it's a note ID
+          if (notes.some(n => n.id === selectedNoteId)) {
+            const connectedIds = findConnectedCluster(selectedNoteId, connections || [])
+            onSelectionChange?.(connectedIds)
+          }
+        }
         return
       }
 
