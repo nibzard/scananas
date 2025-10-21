@@ -229,6 +229,66 @@ export function Canvas({ notes, connections = [], shapes = [], selectedIds = [],
     setEditingConnection(null)
   }
 
+  const insertNoteOnConnection = (connection: Connection, clickWorldPos: Point) => {
+    if (!onExecuteCommand) return
+
+    const srcNote = notes.find(n => n.id === connection.srcNoteId)
+    const dstNote = notes.find(n => n.id === connection.dstNoteId)
+    if (!srcNote || !dstNote) return
+
+    const srcCenter = {
+      x: srcNote.frame.x + srcNote.frame.w / 2,
+      y: srcNote.frame.y + srcNote.frame.h / 2
+    }
+    const dstCenter = {
+      x: dstNote.frame.x + dstNote.frame.w / 2,
+      y: dstNote.frame.y + dstNote.frame.h / 2
+    }
+
+    // Create new note at the click position (or midpoint if no specific click position)
+    const newNotePosition = clickWorldPos || {
+      x: (srcCenter.x + dstCenter.x) / 2,
+      y: (srcCenter.y + dstCenter.y) / 2
+    }
+
+    const newNote: Note = {
+      id: `n${Date.now()}`,
+      text: '',
+      frame: {
+        x: newNotePosition.x - 60, // Center the note (120px wide) on the click point
+        y: newNotePosition.y - 25, // Center the note (50px tall) on the click point
+        w: 120,
+        h: 50
+      },
+      faded: false
+    }
+
+    // Create two new connections
+    const firstNewConnection: Connection = {
+      id: `c${Date.now()}-1`,
+      srcNoteId: connection.srcNoteId,
+      dstNoteId: newNote.id,
+      style: connection.style,
+      label: connection.label?.substring(0, Math.floor(connection.label.length / 2)) || undefined
+    }
+
+    const secondNewConnection: Connection = {
+      id: `c${Date.now()}-2`,
+      srcNoteId: newNote.id,
+      dstNoteId: connection.dstNoteId,
+      style: connection.style,
+      label: connection.label?.substring(Math.floor(connection.label.length / 2)) || undefined
+    }
+
+    // Execute the command
+    onExecuteCommand(new InsertNoteOnConnectionCommand(
+      connection,
+      newNote,
+      firstNewConnection,
+      secondNewConnection
+    ))
+  }
+
   const deleteSelectedNotes = () => {
     if (selectedIds.length === 0 || !onExecuteCommand) return
 
@@ -797,6 +857,7 @@ export function Canvas({ notes, connections = [], shapes = [], selectedIds = [],
       
       const hit = hitTest(notes, world)
       const connectionHit = hitTestConnectionLabel(connections, notes, world, transform)
+      const connectionLineHit = hitTestConnectionLine(connections, notes, world, 8 / transform.scale)
       const endpointHit = hitTestConnectionEndpoint(connections, notes, world, 12 / transform.scale)
       const shapeHit = hitTestShape(shapes, world)
 
@@ -804,6 +865,14 @@ export function Canvas({ notes, connections = [], shapes = [], selectedIds = [],
       if (connectionHit && timeSinceLastClick < 500 && distFromLastClick < 10) {
         // Double-click on connection label - start editing
         startEditingConnectionLabel(connectionHit.id)
+        lastClickTime.current = 0 // Reset to prevent triple-click issues
+        return
+      }
+
+      // Check for connection line double-click
+      if (connectionLineHit && timeSinceLastClick < 500 && distFromLastClick < 10) {
+        // Double-click on connection line - insert note
+        insertNoteOnConnection(connectionLineHit, world)
         lastClickTime.current = 0 // Reset to prevent triple-click issues
         return
       }
@@ -1792,6 +1861,51 @@ function hitTestConnectionEndpoint(connections: Connection[], notes: Note[], pWo
     const dstDist = Math.sqrt(Math.pow(pWorld.x - dstCenter.x, 2) + Math.pow(pWorld.y - dstCenter.y, 2))
     if (dstDist <= tolerance) {
       return { connection: conn, endpointType: 'destination' }
+    }
+  }
+  return null
+}
+
+function hitTestConnectionLine(connections: Connection[], notes: Note[], pWorld: Point, tolerance = 8): Connection | null {
+  for (const conn of connections) {
+    const srcNote = notes.find(n => n.id === conn.srcNoteId)
+    const dstNote = notes.find(n => n.id === conn.dstNoteId)
+    if (!srcNote || !dstNote) continue
+
+    const srcCenter = {
+      x: srcNote.frame.x + srcNote.frame.w / 2,
+      y: srcNote.frame.y + srcNote.frame.h / 2
+    }
+    const dstCenter = {
+      x: dstNote.frame.x + dstNote.frame.w / 2,
+      y: dstNote.frame.y + dstNote.frame.h / 2
+    }
+
+    // Calculate distance from point to line segment
+    const lineVec = { x: dstCenter.x - srcCenter.x, y: dstCenter.y - srcCenter.y }
+    const pointVec = { x: pWorld.x - srcCenter.x, y: pWorld.y - srcCenter.y }
+    const lineLengthSq = lineVec.x * lineVec.x + lineVec.y * lineVec.y
+
+    if (lineLengthSq === 0) {
+      // Source and destination are the same point
+      const dist = Math.sqrt(pointVec.x * pointVec.x + pointVec.y * pointVec.y)
+      if (dist <= tolerance) return conn
+      continue
+    }
+
+    const t = Math.max(0, Math.min(1, (pointVec.x * lineVec.x + pointVec.y * lineVec.y) / lineLengthSq))
+    const closestPoint = {
+      x: srcCenter.x + t * lineVec.x,
+      y: srcCenter.y + t * lineVec.y
+    }
+
+    const dist = Math.sqrt(
+      Math.pow(pWorld.x - closestPoint.x, 2) +
+      Math.pow(pWorld.y - closestPoint.y, 2)
+    )
+
+    if (dist <= tolerance) {
+      return conn
     }
   }
   return null
