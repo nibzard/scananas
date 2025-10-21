@@ -13,7 +13,7 @@ import { useCommandStack } from '../hooks/useCommandStack'
 import { useAutosave } from '../hooks/useAutosave'
 import { openDocument, openSpecificDocument, saveDocument, checkRecoveryFiles, exportDocumentAsText, exportDocumentAsPNG, savePngToFile, exportDocumentAsPDF, savePdfToFile } from '../bridge/tauri'
 import { exportToPNG, exportToTXT, exportToPDF, exportToRTF, exportToOPML, downloadFile, downloadText } from '../export/canvasExport'
-import { UpdateNotesCommand, UpdateConnectionsCommand, CreateShapesCommand, UpdateShapesCommand, SearchCommand } from '../state/commands'
+import { UpdateNotesCommand, UpdateConnectionsCommand, CreateShapesCommand, UpdateShapesCommand, SearchCommand, AlignNotesCommand, DistributeNotesCommand, ResizeNotesCommand } from '../state/commands'
 import { SearchResult, findConnectedCluster } from '../utils/search'
 
 interface AutosaveInfo {
@@ -311,11 +311,87 @@ export function App() {
         e.preventDefault()
         setShowHelp(true)
       }
+
+      // Alignment shortcuts (Ctrl/Cmd + Shift + Arrow keys)
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && selection.length >= 2) {
+        switch (e.code) {
+          case 'ArrowLeft':
+            e.preventDefault()
+            executeCommand(new AlignNotesCommand(selection, 'left'))
+            break
+          case 'ArrowRight':
+            e.preventDefault()
+            executeCommand(new AlignNotesCommand(selection, 'right'))
+            break
+          case 'ArrowUp':
+            e.preventDefault()
+            executeCommand(new AlignNotesCommand(selection, 'top'))
+            break
+          case 'ArrowDown':
+            e.preventDefault()
+            executeCommand(new AlignNotesCommand(selection, 'bottom'))
+            break
+        }
+      }
+
+      // Center alignment shortcuts (Ctrl/Cmd + Alt + Arrow keys)
+      if ((e.ctrlKey || e.metaKey) && e.altKey && selection.length >= 2) {
+        switch (e.code) {
+          case 'ArrowLeft':
+          case 'ArrowRight':
+            e.preventDefault()
+            executeCommand(new AlignNotesCommand(selection, 'center'))
+            break
+          case 'ArrowUp':
+          case 'ArrowDown':
+            e.preventDefault()
+            executeCommand(new AlignNotesCommand(selection, 'middle'))
+            break
+        }
+      }
+
+      // Distribution shortcuts (Ctrl/Cmd + Shift + D/H/V)
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && selection.length >= 3) {
+        if (e.code === 'KeyD') {
+          e.preventDefault()
+          // Default to horizontal distribution
+          executeCommand(new DistributeNotesCommand(selection, 'horizontal'))
+        } else if (e.code === 'KeyH') {
+          e.preventDefault()
+          executeCommand(new DistributeNotesCommand(selection, 'horizontal'))
+        } else if (e.code === 'KeyV') {
+          e.preventDefault()
+          executeCommand(new DistributeNotesCommand(selection, 'vertical'))
+        }
+      }
+
+      // Same size shortcuts (Ctrl/Cmd + Shift + W/H/E)
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && selection.length >= 2) {
+        if (e.code === 'KeyW') {
+          e.preventDefault()
+          executeCommand(new ResizeNotesCommand(selection, 'width'))
+        } else if (e.code === 'KeyH') {
+          e.preventDefault()
+          // Don't interfere with vertical distribution - use Ctrl+Shift+Alt+H for height
+          if (e.altKey) {
+            executeCommand(new ResizeNotesCommand(selection, 'height'))
+          }
+        } else if (e.code === 'KeyE') {
+          e.preventDefault()
+          executeCommand(new ResizeNotesCommand(selection, 'both'))
+        }
+      }
+
+      // Alternative height shortcut (Ctrl/Cmd + Shift + Alt + H)
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.altKey && e.code === 'KeyH' && selection.length >= 2) {
+        e.preventDefault()
+        executeCommand(new ResizeNotesCommand(selection, 'height'))
+      }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [onSave, onOpen, onForceAutosave])
+  }, [onSave, onOpen, onForceAutosave, selection, executeCommand])
 
   return (
     <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column' }}>

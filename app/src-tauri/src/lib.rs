@@ -652,8 +652,18 @@ fn generate_txt_content(doc: &model::BoardDocument, ordering: &str) -> Result<St
         ordered_notes.iter().find(|n| n.id == conn.src_note_id),
         ordered_notes.iter().find(|n| n.id == conn.dst_note_id)
       ) {
-        let src_index = ordered_notes.iter().position(|n| n.id == conn.src_note_id).unwrap() + 1;
-        let dst_index = ordered_notes.iter().position(|n| n.id == conn.dst_note_id).unwrap() + 1;
+        let src_index = ordered_notes.iter().position(|n| n.id == conn.src_note_id)
+          .map(|i| i + 1)
+          .unwrap_or(0);
+        let dst_index = ordered_notes.iter().position(|n| n.id == conn.dst_note_id)
+          .map(|i| i + 1)
+          .unwrap_or(0);
+        
+        // Skip if we couldn't find the note indices
+        if src_index == 0 || dst_index == 0 {
+          continue;
+        }
+        
         output += &format!("{}. [{}] → [{}]: \"{}\" → \"{}\"\n",
           index + 1, src_index, dst_index, src_note.text, dst_note.text);
         if let Some(label) = &conn.label {
@@ -680,8 +690,9 @@ fn generate_txt_content(doc: &model::BoardDocument, ordering: &str) -> Result<St
       output += &format!("{}. Stack ({} notes):\n", index + 1, stack.note_ids.len());
       for note_id in &stack.note_ids {
         if let Some(note) = ordered_notes.iter().find(|n| n.id == *note_id) {
-          let note_index = ordered_notes.iter().position(|n| n.id == *note_id).unwrap() + 1;
-          output += &format!("   - [{}] {}\n", note_index, note.text);
+          if let Some(note_index) = ordered_notes.iter().position(|n| n.id == *note_id) {
+            output += &format!("   - [{}] {}\n", note_index + 1, note.text);
+          }
         }
       }
       output += "\n";
@@ -720,8 +731,18 @@ fn generate_rtf_content(doc: &model::BoardDocument, ordering: &str) -> Result<St
         ordered_notes.iter().find(|n| n.id == conn.src_note_id),
         ordered_notes.iter().find(|n| n.id == conn.dst_note_id)
       ) {
-        let src_index = ordered_notes.iter().position(|n| n.id == conn.src_note_id).unwrap() + 1;
-        let dst_index = ordered_notes.iter().position(|n| n.id == conn.dst_note_id).unwrap() + 1;
+        let src_index = ordered_notes.iter().position(|n| n.id == conn.src_note_id)
+          .map(|i| i + 1)
+          .unwrap_or(0);
+        let dst_index = ordered_notes.iter().position(|n| n.id == conn.dst_note_id)
+          .map(|i| i + 1)
+          .unwrap_or(0);
+        
+        // Skip if we couldn't find the note indices
+        if src_index == 0 || dst_index == 0 {
+          continue;
+        }
+        
         rtf += &format!("{}. [{}] → [{}]: {} → {}\\par",
           index + 1, src_index, dst_index,
           rtf_escape(&src_note.text), rtf_escape(&dst_note.text));
@@ -1022,5 +1043,9 @@ pub fn run() {
       save_pdf_to_file
     ])
     .run(tauri::generate_context!())
-    .expect("error while running tauri application");
+    .map_err(|e| {
+      eprintln!("Failed to start Tauri application: {}", e);
+      std::process::exit(1);
+    })
+    .unwrap();
 }

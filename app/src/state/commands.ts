@@ -1113,3 +1113,299 @@ export class UnstackCommand implements Command {
     }
   }
 }
+
+// STK-3: Stack Alignment and Distribution Commands
+
+export type AlignmentType = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom'
+export type DistributionType = 'horizontal' | 'vertical'
+
+export class AlignNotesCommand implements Command {
+  description = 'Align notes'
+  private readonly noteIds: string[]
+  private readonly alignmentType: AlignmentType
+  private readonly previousNoteStates: Note[]
+
+  constructor(noteIds: string[], alignmentType: AlignmentType) {
+    this.noteIds = noteIds
+    this.alignmentType = alignmentType
+    this.previousNoteStates = []
+  }
+
+  execute(doc: BoardDocument): BoardDocument {
+    const notesToAlign = doc.notes.filter(note => this.noteIds.includes(note.id))
+    if (notesToAlign.length < 2) return doc
+
+    // Store previous states for undo
+    this.previousNoteStates = notesToAlign.map(note => ({ ...note }))
+
+    let alignValue: number
+
+    switch (this.alignmentType) {
+      case 'left':
+        alignValue = Math.min(...notesToAlign.map(n => n.frame.x))
+        break
+      case 'center':
+        const leftmost = Math.min(...notesToAlign.map(n => n.frame.x))
+        const rightmost = Math.max(...notesToAlign.map(n => n.frame.x + n.frame.w))
+        alignValue = (leftmost + rightmost) / 2
+        break
+      case 'right':
+        alignValue = Math.max(...notesToAlign.map(n => n.frame.x + n.frame.w))
+        break
+      case 'top':
+        alignValue = Math.min(...notesToAlign.map(n => n.frame.y))
+        break
+      case 'middle':
+        const topmost = Math.min(...notesToAlign.map(n => n.frame.y))
+        const bottommost = Math.max(...notesToAlign.map(n => n.frame.y + n.frame.h))
+        alignValue = (topmost + bottommost) / 2
+        break
+      case 'bottom':
+        alignValue = Math.max(...notesToAlign.map(n => n.frame.y + n.frame.h))
+        break
+      default:
+        return doc
+    }
+
+    const updatedNotes = doc.notes.map(note => {
+      if (this.noteIds.includes(note.id)) {
+        let newFrame = { ...note.frame }
+
+        switch (this.alignmentType) {
+          case 'left':
+            newFrame.x = alignValue
+            break
+          case 'center':
+            newFrame.x = alignValue - note.frame.w / 2
+            break
+          case 'right':
+            newFrame.x = alignValue - note.frame.w
+            break
+          case 'top':
+            newFrame.y = alignValue
+            break
+          case 'middle':
+            newFrame.y = alignValue - note.frame.h / 2
+            break
+          case 'bottom':
+            newFrame.y = alignValue - note.frame.h
+            break
+        }
+
+        return { ...note, frame: newFrame }
+      }
+      return note
+    })
+
+    return { ...doc, notes: updatedNotes }
+  }
+
+  undo(doc: BoardDocument): BoardDocument {
+    const noteIdToPrevious = new Map(this.previousNoteStates.map(n => [n.id, n]))
+
+    return {
+      ...doc,
+      notes: doc.notes.map(note => {
+        const previous = noteIdToPrevious.get(note.id)
+        if (previous) {
+          return { ...previous }
+        }
+        return note
+      })
+    }
+  }
+}
+
+export class DistributeNotesCommand implements Command {
+  description = 'Distribute notes'
+  private readonly noteIds: string[]
+  private readonly distributionType: DistributionType
+  private readonly previousNoteStates: Note[]
+
+  constructor(noteIds: string[], distributionType: DistributionType) {
+    this.noteIds = noteIds
+    this.distributionType = distributionType
+    this.previousNoteStates = []
+  }
+
+  execute(doc: BoardDocument): BoardDocument {
+    const notesToDistribute = doc.notes.filter(note => this.noteIds.includes(note.id))
+    if (notesToDistribute.length < 3) return doc
+
+    // Store previous states for undo
+    this.previousNoteStates = notesToDistribute.map(note => ({ ...note }))
+
+    // Sort notes based on distribution type
+    const sortedNotes = [...notesToDistribute].sort((a, b) => {
+      if (this.distributionType === 'horizontal') {
+        return a.frame.x - b.frame.x
+      } else {
+        return a.frame.y - b.frame.y
+      }
+    })
+
+    if (this.distributionType === 'horizontal') {
+      // Calculate equal spacing horizontally
+      const leftmost = sortedNotes[0].frame.x
+      const rightmost = sortedNotes[sortedNotes.length - 1].frame.x + sortedNotes[sortedNotes.length - 1].frame.w
+      const totalSpace = rightmost - leftmost
+      const totalWidth = sortedNotes.reduce((sum, note) => sum + note.frame.w, 0)
+      const availableSpace = totalSpace - totalWidth
+      const spacing = availableSpace / (sortedNotes.length - 1)
+
+      let currentX = leftmost
+      const noteIdToNewX = new Map<string, number>()
+
+      sortedNotes.forEach((note, index) => {
+        if (index === 0) {
+          noteIdToNewX.set(note.id, note.frame.x)
+          currentX += note.frame.w + spacing
+        } else if (index === sortedNotes.length - 1) {
+          noteIdToNewX.set(note.id, rightmost - note.frame.w)
+        } else {
+          noteIdToNewX.set(note.id, currentX)
+          currentX += note.frame.w + spacing
+        }
+      })
+
+      return {
+        ...doc,
+        notes: doc.notes.map(note => {
+          const newX = noteIdToNewX.get(note.id)
+          if (newX !== undefined) {
+            return {
+              ...note,
+              frame: { ...note.frame, x: newX }
+            }
+          }
+          return note
+        })
+      }
+    } else {
+      // Calculate equal spacing vertically
+      const topmost = sortedNotes[0].frame.y
+      const bottommost = sortedNotes[sortedNotes.length - 1].frame.y + sortedNotes[sortedNotes.length - 1].frame.h
+      const totalSpace = bottommost - topmost
+      const totalHeight = sortedNotes.reduce((sum, note) => sum + note.frame.h, 0)
+      const availableSpace = totalSpace - totalHeight
+      const spacing = availableSpace / (sortedNotes.length - 1)
+
+      let currentY = topmost
+      const noteIdToNewY = new Map<string, number>()
+
+      sortedNotes.forEach((note, index) => {
+        if (index === 0) {
+          noteIdToNewY.set(note.id, note.frame.y)
+          currentY += note.frame.h + spacing
+        } else if (index === sortedNotes.length - 1) {
+          noteIdToNewY.set(note.id, bottommost - note.frame.h)
+        } else {
+          noteIdToNewY.set(note.id, currentY)
+          currentY += note.frame.h + spacing
+        }
+      })
+
+      return {
+        ...doc,
+        notes: doc.notes.map(note => {
+          const newY = noteIdToNewY.get(note.id)
+          if (newY !== undefined) {
+            return {
+              ...note,
+              frame: { ...note.frame, y: newY }
+            }
+          }
+          return note
+        })
+      }
+    }
+  }
+
+  undo(doc: BoardDocument): BoardDocument {
+    const noteIdToPrevious = new Map(this.previousNoteStates.map(n => [n.id, n]))
+
+    return {
+      ...doc,
+      notes: doc.notes.map(note => {
+        const previous = noteIdToPrevious.get(note.id)
+        if (previous) {
+          return { ...previous }
+        }
+        return note
+      })
+    }
+  }
+}
+
+export class ResizeNotesCommand implements Command {
+  description = 'Resize notes to same dimensions'
+  private readonly noteIds: string[]
+  private readonly resizeType: 'width' | 'height' | 'both'
+  private readonly targetWidth?: number
+  private readonly targetHeight?: number
+  private readonly previousNoteStates: Note[]
+
+  constructor(noteIds: string[], resizeType: 'width' | 'height' | 'both', targetWidth?: number, targetHeight?: number) {
+    this.noteIds = noteIds
+    this.resizeType = resizeType
+    this.targetWidth = targetWidth
+    this.targetHeight = targetHeight
+    this.previousNoteStates = []
+  }
+
+  execute(doc: BoardDocument): BoardDocument {
+    const notesToResize = doc.notes.filter(note => this.noteIds.includes(note.id))
+    if (notesToResize.length < 2) return doc
+
+    // Store previous states for undo
+    this.previousNoteStates = notesToResize.map(note => ({ ...note }))
+
+    // Calculate target dimensions if not provided
+    let finalWidth = this.targetWidth
+    let finalHeight = this.targetHeight
+
+    if (finalWidth === undefined && (this.resizeType === 'width' || this.resizeType === 'both')) {
+      // Use average width of selected notes
+      finalWidth = Math.round(notesToResize.reduce((sum, note) => sum + note.frame.w, 0) / notesToResize.length)
+    }
+
+    if (finalHeight === undefined && (this.resizeType === 'height' || this.resizeType === 'both')) {
+      // Use average height of selected notes
+      finalHeight = Math.round(notesToResize.reduce((sum, note) => sum + note.frame.h, 0) / notesToResize.length)
+    }
+
+    const updatedNotes = doc.notes.map(note => {
+      if (this.noteIds.includes(note.id)) {
+        let newFrame = { ...note.frame }
+
+        if (this.resizeType === 'width' || this.resizeType === 'both') {
+          newFrame.w = finalWidth!
+        }
+
+        if (this.resizeType === 'height' || this.resizeType === 'both') {
+          newFrame.h = finalHeight!
+        }
+
+        return { ...note, frame: newFrame }
+      }
+      return note
+    })
+
+    return { ...doc, notes: updatedNotes }
+  }
+
+  undo(doc: BoardDocument): BoardDocument {
+    const noteIdToPrevious = new Map(this.previousNoteStates.map(n => [n.id, n]))
+
+    return {
+      ...doc,
+      notes: doc.notes.map(note => {
+        const previous = noteIdToPrevious.get(note.id)
+        if (previous) {
+          return { ...previous }
+        }
+        return note
+      })
+    }
+  }
+}

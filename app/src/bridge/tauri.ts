@@ -6,16 +6,18 @@ export async function invoke<T = unknown>(cmd: string, args?: Record<string, any
   throw new Error('Not running inside Tauri environment')
 }
 
+import type { BoardDocument } from '../model/types'
+
 // Document operations
-export async function openDocument(): Promise<any> {
+export async function openDocument(): Promise<BoardDocument> {
   return invoke('open_document')
 }
 
-export async function openSpecificDocument(filePath: string): Promise<any> {
+export async function openSpecificDocument(filePath: string): Promise<BoardDocument> {
   return invoke('open_specific_document', { filePath })
 }
 
-export async function saveDocument(doc: any): Promise<string> {
+export async function saveDocument(doc: BoardDocument): Promise<string> {
   return invoke('save_document', { args: { doc } })
 }
 
@@ -28,8 +30,8 @@ export async function clearRecentFiles(): Promise<void> {
   return invoke('clear_recent_files')
 }
 
-// Autosave operations
-export async function autosaveDocument(doc: any, filePath: string): Promise<any> {
+// Autosave operations  
+export async function autosaveDocument(doc: BoardDocument, filePath: string): Promise<void> {
   return invoke('autosave_document', { args: { doc, file_path: filePath } })
 }
 
@@ -54,7 +56,7 @@ export async function recoverFromAutosave(recoveryPath: string): Promise<any> {
 }
 
 // Export operations
-export async function exportDocumentAsText(doc: any, format: string, ordering?: string): Promise<string> {
+export async function exportDocumentAsText(doc: BoardDocument, format: string, ordering?: string): Promise<string> {
   return invoke('export_document_as_text', { args: { doc, format, ordering } })
 }
 

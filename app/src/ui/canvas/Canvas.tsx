@@ -1178,7 +1178,8 @@ export function Canvas({ notes, connections = [], shapes = [], stacks = [], sele
         dragIds.forEach(id => {
           const shape = shapes.find(s => s.id === id)
           if (shape) {
-            initialNoteStates.current!.set(id, shape as any) // Type hack for now
+            // Store shape data properly - we'll need to handle shapes differently in undo/redo
+            initialNoteStates.current!.set(id, shape as any)
           }
         })
 

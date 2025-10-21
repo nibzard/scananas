@@ -22,7 +22,7 @@ Status: **Enhanced MVP with Production Improvements + Critical Fixes**. Core fun
 - ✅ **File I/O**: Enhanced JSON open/save with native dialogs, schema versioning, recent files
 - ✅ **Comprehensive Undo/Redo**: Full command pattern implementation for all operations (movement, resize, connections, style changes) with smart continuous operation tracking
 
-**NEW: Background Shapes System (SHP-1 & SHP-3 Completed):**
+**NEW: Background Shapes System (SHP-1, SHP-2, SHP-3 ALL COMPLETED):**
 - ✅ **Shape Creation**: "⬜ Shape" toolbar button creates rounded rectangles with customizable properties
 - ✅ **Canvas Rendering**: Proper z-ordering with shapes rendering behind notes, rounded corners with adjustable radius
 - ✅ **Shape Selection**: Click selection, Shift+click multi-select, marquee selection, visual selection highlighting
@@ -31,6 +31,7 @@ Status: **Enhanced MVP with Production Improvements + Critical Fixes**. Core fun
 - ✅ **Command System**: Full CRUD operations with undo/redo (CreateShapesCommand, DeleteShapesCommand, MoveShapesCommand, ResizeShapesCommand, UpdateShapesCommand)
 - ✅ **Interactive Features**: Delete/Backspace support, magnetic behavior toggle for note snapping, optional shape labels
 - ✅ **Visual Design**: Subtle styling with transparency, selection highlighting, professional appearance
+- ✅ **Magnetic Behavior**: Complete overlap detection (50% threshold), group translation (red feedback), proximity attraction (yellow feedback), shape-to-shape interactions, distance-based force calculation
 
 **NEW: Search & Selection System (SRCH-1 & SRCH-2 Completed):**
 - ✅ **Incremental Search**: Real-time search across notes and connection labels with case-insensitive filtering
@@ -110,23 +111,26 @@ Status: **Enhanced MVP with Production Improvements + Critical Fixes**. Core fun
 - Advanced undo/redo system implemented
 - File I/O with dual format support (.fim/.json)
 - Search and selection system with connected cluster analysis
+- **RECENTLY FIXED (October 2025)**: Dangerous .unwrap() calls replaced with proper error handling
+- **RECENTLY FIXED**: TypeScript type safety issues resolved, proper types added to bridge functions
+- **RECENTLY FIXED**: Removed unused default App.tsx file, cleaned up codebase
 
 ### 🚧 **High Priority Missing MVP Features:**
-1. **Background Shapes** (SHP-2) - Magnetic move behavior for shapes
+1. ✅ **Background Shapes** (SHP-1, SHP-2, SHP-3) - **COMPLETE** with full magnetic behavior!
 2. **Stacks System** (STK-1, STK-2, STK-3) - Hierarchical note organization
 3. **Performance Optimization** (CAN-2, CAN-3, PERF-1) - Spatial indexing for large documents
 
 ### 🎯 **Recommended Next Steps:**
-1. Complete background shapes with magnetic behavior
-2. Build stacks system for hierarchical organization
-3. Optimize rendering performance
+1. ✅ ~~Complete background shapes with magnetic behavior~~ **DONE!**
+2. **Build stacks system for hierarchical organization** ⚡ **NEXT PRIORITY**
+3. Optimize rendering performance  
 4. Add accessibility features
 
 ### 🏗️ **Architecture Health:**
-- **Security**: ✅ Excellent (capabilities restricted, no unsafe operations)
-- **Stability**: ✅ Excellent (comprehensive error handling, recovery system)
+- **Security**: ✅ Excellent (capabilities restricted, no unsafe operations, memory safety improved)
+- **Stability**: ✅ Excellent (comprehensive error handling, recovery system, eliminated panic risks)
 - **Performance**: 🟡 Good (suitable for moderate use, needs optimization for 10k+ notes)
-- **Maintainability**: ✅ Excellent (clean code, TypeScript/Rust integration, zero warnings)
+- **Maintainability**: ✅ Excellent (clean code, TypeScript/Rust integration, zero warnings, improved type safety)
 
 ## Conventions
 
@@ -188,7 +192,7 @@ Status: **Enhanced MVP with Production Improvements + Critical Fixes**. Core fun
 
 ### 6) Background Shapes (Groups)
 - SHP-1 [mvp] Rect shapes with corner radius, label — owner: claude — status: completed ✅
-- SHP-2 [mvp] Magnetic move: overlap test and group translation — owner: unassigned — status: todo
+- SHP-2 [mvp] Magnetic move: overlap test and group translation — owner: @amp — status: done (completed 2025-10-21) ✅ **COMPLETED**: Full magnetic behavior implemented including overlap detection (50% threshold), group translation (red visual feedback), proximity attraction (yellow visual feedback), shape-to-shape magnetic interactions, distance-based force calculation, and complete undo/redo integration
 - SHP-3 [mvp] Z‑order: shapes behind notes; handles on select — owner: claude — status: completed ✅
 
 ### 7) Stacks
@@ -246,7 +250,9 @@ Status: **Enhanced MVP with Production Improvements + Critical Fixes**. Core fun
 - SEC-3 [mvp] Crash logs local; optional opt‑in telemetry gates — owner: unassigned — status: todo
 - SEC-4 [mvp] Proper capability scoping for file system access — owner: @amp — status: done
 - SEC-5 [mvp] Dialog permissions with file type restrictions — owner: @amp — status: done
-- SEC-6 [tech] Memory safety improvements - eliminate unsafe .unwrap() calls — owner: @amp — status: done (completed 2025-10-20) ✅ **COMPLETED**: Replaced all unsafe `.unwrap()` calls with proper error handling for file operations and path handling
+- SEC-6 [tech] Memory safety improvements - eliminate unsafe .unwrap() calls — owner: @amp — status: done (completed 2025-10-21) ✅ **COMPLETED**: Replaced all dangerous `.unwrap()` calls in export functions with proper error handling, eliminated panic risks in text ordering and connection indexing
+- SEC-7 [tech] TypeScript type safety improvements — owner: @amp — status: done (completed 2025-10-21) ✅ **COMPLETED**: Added proper TypeScript types to bridge functions, replaced Promise<any> with BoardDocument types, improved type safety across Rust-TypeScript interface
+- SEC-8 [tech] Code cleanup and maintenance — owner: @amp — status: done (completed 2025-10-21) ✅ **COMPLETED**: Removed unused default App.tsx file, cleaned up type hacks, improved overall code quality and maintainability
 
 ### 18) QA, Tooling, Fixtures
 - QA-1 [mvp] Test matrix per SPECS section 12 — owner: unassigned — status: todo
