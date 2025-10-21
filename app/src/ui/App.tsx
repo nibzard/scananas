@@ -58,6 +58,8 @@ export function App() {
   const [showRecoveryDialog, setShowRecoveryDialog] = React.useState(false)
   const [isDirty, setIsDirty] = React.useState(false)
   const [textOrdering, setTextOrdering] = React.useState<'spatial' | 'connections' | 'hierarchical'>('spatial')
+  const [pdfPageSize, setPdfPageSize] = React.useState<'a3' | 'a4' | 'a5' | 'letter' | 'legal'>('a4')
+  const [pdfOrientation, setPdfOrientation] = React.useState<'auto' | 'portrait' | 'landscape'>('auto')
 
   // Initialize autosave functionality
   const {
@@ -160,7 +162,14 @@ export function App() {
 
   const onExportPDF = async () => {
     try {
-      const blob = await exportToPDF(doc, { format: 'pdf', scale: 2 })
+      const blob = await exportToPDF(doc, {
+        format: 'pdf',
+        pageSize: pdfPageSize,
+        orientation: pdfOrientation,
+        quality: 'high',
+        includeFaded: true,
+        margin: 50
+      })
       const filename = `fim-export-${Date.now()}.pdf`
       await downloadFile(blob, filename)
       console.log('PDF exported:', filename)
@@ -252,6 +261,43 @@ export function App() {
         <div style={{ height: 24, width: 1, background: '#333', margin: '0 4px' }} />
         <button onClick={onExportPNG} style={btnStyle}>Export PNG</button>
         <button onClick={onExportPDF} style={btnStyle}>Export PDF</button>
+        <select
+          value={pdfPageSize}
+          onChange={(e) => setPdfPageSize(e.target.value as 'a3' | 'a4' | 'a5' | 'letter' | 'legal')}
+          style={{
+            background: '#222',
+            color: '#eee',
+            border: '1px solid #555',
+            padding: '2px 6px',
+            fontSize: '12px',
+            borderRadius: '3px',
+            marginRight: '4px'
+          }}
+          title="PDF page size"
+        >
+          <option value="a4">A4</option>
+          <option value="a3">A3</option>
+          <option value="a5">A5</option>
+          <option value="letter">Letter</option>
+          <option value="legal">Legal</option>
+        </select>
+        <select
+          value={pdfOrientation}
+          onChange={(e) => setPdfOrientation(e.target.value as 'auto' | 'portrait' | 'landscape')}
+          style={{
+            background: '#222',
+            color: '#eee',
+            border: '1px solid #555',
+            padding: '2px 6px',
+            fontSize: '12px',
+            borderRadius: '3px'
+          }}
+          title="PDF orientation"
+        >
+          <option value="auto">Auto</option>
+          <option value="portrait">Portrait</option>
+          <option value="landscape">Landscape</option>
+        </select>
         <div style={{ height: 24, width: 1, background: '#333', margin: '0 4px' }} />
         <select
           value={textOrdering}

@@ -1,4 +1,4 @@
-import type { BoardDocument, Note, Connection } from '../model/types'
+import type { BoardDocument, Note, Connection, Stack } from '../model/types'
 import { jsPDF } from 'jspdf'
 
 export interface ExportOptions {
@@ -8,6 +8,9 @@ export interface ExportOptions {
   includeFaded?: boolean
   margin?: number
   textOrdering?: 'spatial' | 'connections' | 'hierarchical'
+  pageSize?: 'a3' | 'a4' | 'a5' | 'letter' | 'legal'
+  orientation?: 'auto' | 'portrait' | 'landscape'
+  quality?: 'low' | 'medium' | 'high'
 }
 
 export async function exportToPNG(
@@ -370,97 +373,95 @@ export async function exportToPDF(
   document: BoardDocument,
   options: ExportOptions = { format: 'pdf' }
 ): Promise<Blob> {
-  const scale = options.scale || 2 // 2x for high quality
   const margin = options.margin || 50
   const background = options.background || '#202124'
+  const pageSize = options.pageSize || 'a4'
+  const orientation = options.orientation || 'auto'
 
   // Calculate content bounds
   const bounds = calculateContentBounds(document.notes)
 
-  // Create offscreen canvas for rendering
-  const canvas = document.createElement('canvas')
-  const ctx = canvas.getContext('2d')!
+  // Convert pixels to mm (3.78 pixels per mm at 96 DPI)
+  const contentWidthMm = (bounds.width + margin * 2) / 3.78
+  const contentHeightMm = (bounds.height + margin * 2) / 3.78
 
-  // Set canvas size
-  const canvasWidth = (bounds.width + margin * 2) * scale
-  const canvasHeight = (bounds.height + margin * 2) * scale
-  canvas.width = canvasWidth
-  canvas.height = canvasHeight
+  // Determine page orientation
+  let finalOrientation: 'portrait' | 'landscape' = 'portrait'
+  if (orientation === 'auto') {
+    finalOrientation = contentWidthMm > contentHeightMm ? 'landscape' : 'portrait'
+  } else {
+    finalOrientation = orientation
+  }
 
-  // Set up rendering context
-  ctx.scale(scale, scale)
-  ctx.translate(margin - bounds.minX, margin - bounds.minY)
+  // Create PDF with vector graphics
+  const pdf = new jsPDF({
+    orientation: finalOrientation,
+    unit: 'mm',
+    format: pageSize
+  })
 
-  // Clear background
-  ctx.fillStyle = background
-  ctx.fillRect(bounds.minX - margin, bounds.minY - margin, bounds.width + margin * 2, bounds.height + margin * 2)
+  // Get page dimensions
+  const pageWidth = pdf.internal.pageSize.getWidth()
+  const pageHeight = pdf.internal.pageSize.getHeight()
+
+  // Calculate scale to fit content on page with margins
+  const marginMm = 10 // 10mm margin
+  const maxWidth = pageWidth - (marginMm * 2)
+  const maxHeight = pageHeight - (marginMm * 2)
+
+  const scaleX = maxWidth / contentWidthMm
+  const scaleY = maxHeight / contentHeightMm
+  const scale = Math.min(scaleX, scaleY, 1) // Don't scale up, only down
+
+  // Calculate offsets to center content
+  const scaledWidth = contentWidthMm * scale
+  const scaledHeight = contentHeightMm * scale
+  const offsetX = marginMm + (maxWidth - scaledWidth) / 2
+  const offsetY = marginMm + (maxHeight - scaledHeight) / 2
+
+  // Save current state
+  pdf.saveGraphicsState()
+
+  // Apply clipping rectangle for content area
+  pdf.rect(offsetX, offsetY, scaledWidth, scaledHeight)
+  pdf.clip()
+
+  // Fill background
+  if (background && background !== 'transparent') {
+    pdf.setFillColor(background)
+    pdf.rect(offsetX, offsetY, scaledWidth, scaledHeight, 'F')
+  }
+
+  // Set up transformation matrix
+  // First translate to the content area
+  // Then apply scaling
+  // Finally convert from pixels to mm
+  const pixelToMm = 1 / 3.78
+  const finalScale = scale * pixelToMm
+
+  // For jsPDF, we need to manually transform coordinates
+  const transformX = (x: number) => offsetX + (x + margin - bounds.minX) * finalScale
+  const transformY = (y: number) => offsetY + (y + margin - bounds.minY) * finalScale
+  const transformScale = (length: number) => length * finalScale
 
   // Render connections first (behind notes)
   for (const connection of document.connections) {
-    renderConnection(ctx, connection, document.notes)
+    renderConnectionVector(pdf, connection, document.notes, transformX, transformY, transformScale)
   }
 
   // Render notes
   for (const note of document.notes) {
     if (!note.faded || options.includeFaded !== false) {
-      renderNote(ctx, note)
+      renderNoteVector(pdf, note, transformX, transformY, transformScale)
     }
   }
 
-  // Convert canvas to image data
-  return new Promise((resolve, reject) => {
-    canvas.toBlob((canvasBlob) => {
-      if (!canvasBlob) {
-        reject(new Error('Failed to render canvas to blob'))
-        return
-      }
+  // Restore graphics state
+  pdf.restoreGraphicsState()
 
-      // Convert canvas blob to base64
-      const reader = new FileReader()
-      reader.onload = () => {
-        const imgData = reader.result as string
-
-        // Calculate PDF dimensions (A4 size as default, but scale to fit content)
-        const pdfWidth = Math.max(210, (bounds.width + margin * 2) / 3.78) // Convert pixels to mm (3.78 pixels per mm at 96 DPI)
-        const pdfHeight = Math.max(297, (bounds.height + margin * 2) / 3.78)
-
-        // Create PDF
-        const pdf = new jsPDF({
-          orientation: pdfWidth > pdfHeight ? 'landscape' : 'portrait',
-          unit: 'mm',
-          format: 'a4'
-        })
-
-        // Calculate image dimensions to fit PDF page
-        const pageWidth = pdf.internal.pageSize.getWidth()
-        const pageHeight = pdf.internal.pageSize.getHeight()
-        const imgWidth = pageWidth - 20 // 10mm margin on each side
-        const imgHeight = (canvasHeight / canvasWidth) * imgWidth
-
-        let imgX = 10 // 10mm margin from left
-        let imgY = 10 // 10mm margin from top
-
-        // If image is too tall, scale it to fit page height
-        let finalImgWidth = imgWidth
-        let finalImgHeight = imgHeight
-        if (imgHeight > pageHeight - 20) {
-          finalImgHeight = pageHeight - 20
-          finalImgWidth = (canvasWidth / canvasHeight) * finalImgHeight
-          imgX = (pageWidth - finalImgWidth) / 2 // Center horizontally
-        }
-
-        // Add image to PDF
-        pdf.addImage(imgData, 'PNG', imgX, imgY, finalImgWidth, finalImgHeight)
-
-        // Convert PDF to blob
-        const pdfBlob = pdf.output('blob')
-        resolve(pdfBlob)
-      }
-
-      reader.onerror = () => reject(new Error('Failed to read canvas blob'))
-      reader.readAsDataURL(canvasBlob)
-    }, 'image/png', 1.0)
-  })
+  // Convert PDF to blob
+  const pdfBlob = pdf.output('blob')
+  return pdfBlob
 }
 
 interface ContentBounds {
@@ -651,4 +652,188 @@ export async function downloadFile(blob: Blob, filename: string) {
 export function downloadText(content: string, filename: string) {
   const blob = new Blob([content], { type: 'text/plain' })
   downloadFile(blob, filename)
+}
+
+// Vector rendering functions for PDF export
+function renderNoteVector(
+  pdf: jsPDF,
+  note: Note,
+  transformX: (x: number) => number,
+  transformY: (y: number) => number,
+  transformScale: (length: number) => number
+) {
+  const alpha = note.faded ? 0.5 : 1.0
+
+  // Save current state
+  pdf.saveGraphicsState()
+  pdf.setGState(pdf.GState({ opacity: alpha }))
+
+  // Draw note background
+  pdf.setFillColor(255, 255, 255) // White background
+  pdf.setDrawColor(204, 204, 204) // Light gray border
+  pdf.setLineWidth(transformScale(1))
+
+  // Draw rounded rectangle with transformed coordinates
+  const radius = transformScale(8)
+  const x = transformX(note.frame.x)
+  const y = transformY(note.frame.y)
+  const width = transformScale(note.frame.w)
+  const height = transformScale(note.frame.h)
+
+  pdf.roundedRect(x, y, width, height, radius, radius, 'FD')
+
+  // Draw text
+  pdf.setTextColor(32, 33, 36) // Dark text color
+  pdf.setFont('helvetica')
+  pdf.setFontSize(transformScale(14))
+
+  const padding = transformScale(8)
+  const textWidth = width - padding * 2
+  const textX = x + padding
+  let textY = y + padding + transformScale(14) // Adjust for font height
+
+  // Word wrap and render text
+  const words = note.text.split(/\s+/)
+  let line = ''
+  const lineHeight = transformScale(18)
+
+  for (let i = 0; i < words.length; i++) {
+    const testLine = line ? `${line} ${words[i]}` : words[i]
+    const metrics = pdf.getTextWidth(testLine)
+
+    if (metrics > textWidth && line) {
+      pdf.text(line, textX, textY)
+      line = words[i]
+      textY += lineHeight
+    } else {
+      line = testLine
+    }
+  }
+
+  if (line) {
+    pdf.text(line, textX, textY)
+  }
+
+  // Restore state
+  pdf.restoreGraphicsState()
+}
+
+function renderConnectionVector(
+  pdf: jsPDF,
+  connection: Connection,
+  notes: Note[],
+  transformX: (x: number) => number,
+  transformY: (y: number) => number,
+  transformScale: (length: number) => number
+) {
+  const srcNote = notes.find(n => n.id === connection.srcNoteId)
+  const dstNote = notes.find(n => n.id === connection.dstNoteId)
+
+  if (!srcNote || !dstNote) return
+
+  // Calculate center points
+  const srcX = srcNote.frame.x + srcNote.frame.w / 2
+  const srcY = srcNote.frame.y + srcNote.frame.h / 2
+  const dstX = dstNote.frame.x + dstNote.frame.w / 2
+  const dstY = dstNote.frame.y + dstNote.frame.h / 2
+
+  // Parse connection color
+  const color = connection.style?.color || 'rgba(255,255,255,0.6)'
+  const lineWidth = transformScale(connection.style?.width || 2)
+
+  pdf.setLineWidth(lineWidth)
+
+  // Convert color string to RGB
+  const rgb = parseColor(color)
+  pdf.setDrawColor(rgb.r, rgb.g, rgb.b)
+
+  if (connection.style?.kind === 'dotted') {
+    pdf.setLineDashPattern([transformScale(5), transformScale(5)], 0)
+  } else {
+    pdf.setLineDashPattern([], 0) // Solid line
+  }
+
+  // Draw the line with transformed coordinates
+  pdf.line(transformX(srcX), transformY(srcY), transformX(dstX), transformY(dstY))
+
+  // Draw arrows if specified
+  const arrows = connection.style?.arrows || 'none'
+  if (arrows !== 'none') {
+    const arrowSize = transformScale(Math.max(8, (connection.style?.width || 2) * 2))
+    const dx = dstX - srcX
+    const dy = dstY - srcY
+    const length = Math.sqrt(dx * dx + dy * dy)
+    const unitX = dx / length
+    const unitY = dy / length
+
+    if (arrows === 'dst' || arrows === 'both') {
+      // Arrow at destination
+      const arrowX = dstX - unitX * (arrowSize / transformScale(1))
+      const arrowY = dstY - unitY * (arrowSize / transformScale(1))
+      const perpX = -unitY * arrowSize * 0.5 / transformScale(1)
+      const perpY = unitX * arrowSize * 0.5 / transformScale(1)
+
+      pdf.setFillColor(rgb.r, rgb.g, rgb.b)
+      pdf.triangle(
+        transformX(dstX), transformY(dstY),
+        transformX(arrowX + perpX), transformY(arrowY + perpY),
+        transformX(arrowX - perpX), transformY(arrowY - perpY),
+        'F'
+      )
+    }
+
+    if (arrows === 'src' || arrows === 'both') {
+      // Arrow at source
+      const arrowX = srcX + unitX * (arrowSize / transformScale(1))
+      const arrowY = srcY + unitY * (arrowSize / transformScale(1))
+      const perpX = -unitY * arrowSize * 0.5 / transformScale(1)
+      const perpY = unitX * arrowSize * 0.5 / transformScale(1)
+
+      pdf.setFillColor(rgb.r, rgb.g, rgb.b)
+      pdf.triangle(
+        transformX(srcX), transformY(srcY),
+        transformX(arrowX + perpX), transformY(arrowY + perpY),
+        transformX(arrowX - perpX), transformY(arrowY - perpY),
+        'F'
+      )
+    }
+  }
+}
+
+function parseColor(color: string): { r: number, g: number, b: number } {
+  // Handle hex colors
+  if (color.startsWith('#')) {
+    const hex = color.slice(1)
+    const r = parseInt(hex.substring(0, 2), 16)
+    const g = parseInt(hex.substring(2, 4), 16)
+    const b = parseInt(hex.substring(4, 6), 16)
+    return { r, g, b }
+  }
+
+  // Handle rgba colors
+  if (color.startsWith('rgba(')) {
+    const match = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/)
+    if (match) {
+      return {
+        r: parseInt(match[1]),
+        g: parseInt(match[2]),
+        b: parseInt(match[3])
+      }
+    }
+  }
+
+  // Handle rgb colors
+  if (color.startsWith('rgb(')) {
+    const match = color.match(/rgb?\((\d+),\s*(\d+),\s*(\d+)/)
+    if (match) {
+      return {
+        r: parseInt(match[1]),
+        g: parseInt(match[2]),
+        b: parseInt(match[3])
+      }
+    }
+  }
+
+  // Default to white
+  return { r: 255, g: 255, b: 255 }
 }
