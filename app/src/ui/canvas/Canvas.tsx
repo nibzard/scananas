@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import type { Note, Rect, Point, Connection, BackgroundShape } from '../../model/types'
+import type { Note, Rect, Point, Connection, BackgroundShape, ID } from '../../model/types'
 import type { Command } from '../../state/commands'
 import { parseMarkdown, type MarkdownSegment } from '../../utils/markdown'
 import { SearchResult, findConnectedCluster } from '../../utils/search'
@@ -20,7 +20,9 @@ import {
   MoveShapesCommand,
   ResizeShapesCommand,
   UpdateShapesCommand,
-  MagneticMoveCommand
+  MagneticMoveCommand,
+  CreateStackCommand,
+  UnstackCommand
 } from '../../state/commands'
 
 type Props = {
@@ -442,6 +444,40 @@ export function Canvas({ notes, connections = [], shapes = [], selectedIds = [],
             const connectedIds = findConnectedCluster(selectedNoteId, connections || [])
             onSelectionChange?.(connectedIds)
           }
+        }
+        return
+      }
+
+      // Create Stack (Ctrl/Cmd + S)
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyS' && !e.shiftKey && !editing && !editingConnection) {
+        e.preventDefault()
+        if (selectedIds.length >= 2 && onExecuteCommand) {
+          // Filter to only include notes (not connections or shapes)
+          const selectedNoteIds = selectedIds.filter(id => notes.some(n => n.id === id))
+          if (selectedNoteIds.length >= 2) {
+            onExecuteCommand(new CreateStackCommand(selectedNoteIds))
+          }
+        }
+        return
+      }
+
+      // Unstack (Ctrl/Cmd + Shift + S)
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.code === 'KeyS' && !editing && !editingConnection) {
+        e.preventDefault()
+        if (selectedIds.length >= 1 && onExecuteCommand) {
+          // Find all stacks that contain selected notes
+          const selectedStackIds = new Set<ID>()
+          selectedIds.forEach(id => {
+            const note = notes.find(n => n.id === id)
+            if (note?.stackId) {
+              selectedStackIds.add(note.stackId)
+            }
+          })
+
+          // Unstack all found stacks
+          selectedStackIds.forEach(stackId => {
+            onExecuteCommand(new UnstackCommand(stackId))
+          })
         }
         return
       }

@@ -1,4 +1,4 @@
-import type { BoardDocument, Note, Connection, BackgroundShape } from '../model/types'
+import type { BoardDocument, Note, Connection, BackgroundShape, Stack } from '../model/types'
 
 // Base command interface
 export interface Command {
@@ -775,6 +775,166 @@ export class MagneticMoveCommand implements Command {
       notes: doc.notes.map(note =>
         noteIdToPrevious.has(note.id) ? noteIdToPrevious.get(note.id)! : note
       )
+    }
+  }
+}
+
+// Stack commands for STK-1: Make/Unstack functionality
+
+export class CreateStackCommand implements Command {
+  description = 'Create stack'
+  private readonly newStack: Stack
+  private readonly previousNoteStates: Note[]
+
+  constructor(noteIds: ID[], spacing: number = 10) {
+    // Generate a unique stack ID
+    const stackId = `stack_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+    this.newStack = {
+      id: stackId,
+      noteIds: [...noteIds],
+      orientation: 'vertical',
+      spacing
+    }
+
+    // Store previous states for undo
+    this.previousNoteStates = []
+  }
+
+  execute(doc: BoardDocument): BoardDocument {
+    // Store previous note states before modifying them
+    const notesToStack = doc.notes.filter(note => this.newStack.noteIds.includes(note.id))
+    this.previousNoteStates = notesToStack.map(note => ({ ...note }))
+
+    // Sort notes by Y then X for consistent stacking
+    const sortedNotes = notesToStack.sort((a, b) => {
+      const yDiff = a.frame.y - b.frame.y
+      if (Math.abs(yDiff) > 5) { // If Y difference is significant, use it
+        return yDiff
+      }
+      return a.frame.x - b.frame.x // Otherwise use X as tiebreaker
+    })
+
+    // Calculate stack position (use the first note's position)
+    const stackX = sortedNotes[0].frame.x
+    const stackY = sortedNotes[0].frame.y
+    const stackSpacing = this.newStack.spacing || 10
+
+    // Update notes with stack positions
+    const updatedNotes = doc.notes.map(note => {
+      const noteIndex = sortedNotes.findIndex(n => n.id === note.id)
+      if (noteIndex !== -1) {
+        const newY = stackY + noteIndex * stackSpacing
+        return {
+          ...note,
+          frame: {
+            ...note.frame,
+            x: stackX,
+            y: newY
+          },
+          stackId: this.newStack.id
+        }
+      }
+      return note
+    })
+
+    return {
+      ...doc,
+      notes: updatedNotes,
+      stacks: [...doc.stacks, this.newStack]
+    }
+  }
+
+  undo(doc: BoardDocument): BoardDocument {
+    // Remove stack and restore notes to their original positions
+    const noteIdToPrevious = new Map(this.previousNoteStates.map(n => [n.id, n]))
+
+    return {
+      ...doc,
+      notes: doc.notes.map(note => {
+        const previous = noteIdToPrevious.get(note.id)
+        if (previous) {
+          return { ...previous }
+        }
+        // Remove stackId from notes that were in this stack
+        if (note.stackId === this.newStack.id) {
+          return { ...note, stackId: undefined }
+        }
+        return note
+      }),
+      stacks: doc.stacks.filter(stack => stack.id !== this.newStack.id)
+    }
+  }
+}
+
+export class UnstackCommand implements Command {
+  description = 'Unstack notes'
+  private readonly stackId: ID
+  private readonly previousNoteStates: Note[]
+  private readonly previousStack?: Stack
+
+  constructor(stackId: ID) {
+    this.stackId = stackId
+    this.previousNoteStates = []
+  }
+
+  execute(doc: BoardDocument): BoardDocument {
+    // Find the stack to unstack
+    const stack = doc.stacks.find(s => s.id === this.stackId)
+    if (!stack) return doc
+
+    // Store previous state for undo
+    this.previousStack = stack
+
+    // Get notes in the stack with their current positions
+    const stackedNotes = doc.notes.filter(note => note.stackId === this.stackId)
+    this.previousNoteStates = stackedNotes.map(note => ({ ...note }))
+
+    // Calculate unstack positions in a grid layout
+    const spacing = 20
+    const notesPerRow = Math.ceil(Math.sqrt(stack.noteIds.length))
+
+    const updatedNotes = doc.notes.map(note => {
+      if (note.stackId === this.stackId) {
+        const noteIndex = stack.noteIds.indexOf(note.id)
+        const row = Math.floor(noteIndex / notesPerRow)
+        const col = noteIndex % notesPerRow
+
+        return {
+          ...note,
+          frame: {
+            ...note.frame,
+            x: note.frame.x + col * spacing,
+            y: note.frame.y + row * spacing
+          },
+          stackId: undefined
+        }
+      }
+      return note
+    })
+
+    return {
+      ...doc,
+      notes: updatedNotes,
+      stacks: doc.stacks.filter(s => s.id !== this.stackId)
+    }
+  }
+
+  undo(doc: BoardDocument): BoardDocument {
+    if (!this.previousStack) return doc
+
+    const noteIdToPrevious = new Map(this.previousNoteStates.map(n => [n.id, n]))
+
+    return {
+      ...doc,
+      notes: doc.notes.map(note => {
+        const previous = noteIdToPrevious.get(note.id)
+        if (previous) {
+          return { ...previous }
+        }
+        return note
+      }),
+      stacks: [...doc.stacks, this.previousStack]
     }
   }
 }
