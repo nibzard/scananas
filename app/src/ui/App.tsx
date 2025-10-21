@@ -10,7 +10,7 @@ import type { BoardDocument, BackgroundShape } from '../model/types'
 import { makeEmptyDoc } from '../state'
 import { useCommandStack } from '../hooks/useCommandStack'
 import { useAutosave } from '../hooks/useAutosave'
-import { openDocument, openSpecificDocument, saveDocument, checkRecoveryFiles, exportDocumentAsText } from '../bridge/tauri'
+import { openDocument, openSpecificDocument, saveDocument, checkRecoveryFiles, exportDocumentAsText, exportDocumentAsPNG, savePngToFile } from '../bridge/tauri'
 import { exportToPNG, exportToTXT, exportToPDF, exportToRTF, exportToOPML, downloadFile, downloadText } from '../export/canvasExport'
 import { UpdateNotesCommand, UpdateConnectionsCommand, CreateShapesCommand, UpdateShapesCommand, SearchCommand } from '../state/commands'
 import { SearchResult, findConnectedCluster } from '../utils/search'
@@ -128,10 +128,20 @@ export function App() {
 
   const onExportPNG = async () => {
     try {
+      // Get file path from native dialog
+      const filePath = await exportDocumentAsPNG(pngDPI)
+
+      // Generate PNG data using existing export function
       const blob = await exportToPNG(doc, { format: 'png', scale: pngDPI })
-      const filename = `fim-export-${Date.now()}-${pngDPI}x.png`
-      await downloadFile(blob, filename)
-      console.log('PNG exported:', filename, `at ${pngDPI}x DPI`)
+
+      // Convert blob to Uint8Array
+      const arrayBuffer = await blob.arrayBuffer()
+      const pngData = new Uint8Array(arrayBuffer)
+
+      // Save PNG data to file using Tauri
+      await savePngToFile(filePath, pngData)
+
+      console.log('PNG exported:', filePath, `at ${pngDPI}x DPI`)
     } catch (e) {
       console.warn('PNG export failed', e)
     }

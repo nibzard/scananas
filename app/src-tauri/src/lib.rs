@@ -23,6 +23,7 @@ struct ExportTextArgs {
   ordering: Option<String>, // "spatial", "connections", "hierarchical"
 }
 
+
 #[derive(Debug, Default)]
 struct AppState {
   recent_files: VecDeque<String>,
@@ -499,6 +500,44 @@ async fn recover_from_autosave(app: tauri::AppHandle, recovery_path: String) -> 
   Ok(doc)
 }
 
+// PNG export command - handles file dialog and path selection
+#[tauri::command]
+async fn export_document_as_png(app: tauri::AppHandle, scale: f64) -> Result<String, String> {
+  use tauri_plugin_dialog::DialogExt;
+
+  // Validate scale is one of the supported values
+  if scale != 1.0 && scale != 2.0 && scale != 3.0 {
+    return Err("Scale must be 1.0, 2.0, or 3.0".to_string());
+  }
+
+  let file_path = app.dialog()
+    .file()
+    .add_filter("PNG Files", &["png"])
+    .set_file_name(&format!("idea_map_{}x.png", scale))
+    .set_title(&format!("Export as PNG ({}x DPI)", scale))
+    .blocking_save_file();
+
+  let path = match file_path {
+    Some(p) => match p.as_path() {
+      Some(path) => path.to_path_buf(),
+      None => return Err("Invalid save path selected".into()),
+    },
+    None => return Err("Export operation cancelled by user".into()),
+  };
+
+  Ok(path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+async fn save_png_to_file(file_path: String, png_data: Vec<u8>) -> Result<(), String> {
+  use std::fs;
+
+  fs::write(&file_path, png_data)
+    .map_err(|e| format!("Failed to write PNG file '{}': {}", file_path, e))?;
+
+  Ok(())
+}
+
 // Text export commands
 #[tauri::command]
 async fn export_document_as_text(app: tauri::AppHandle, args: ExportTextArgs) -> Result<String, String> {
@@ -892,6 +931,7 @@ fn has_children(note_id: &str, doc: &model::BoardDocument) -> bool {
   doc.connections.iter().any(|c| c.src_note_id == note_id)
 }
 
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   let builder = tauri::Builder::default()
@@ -930,7 +970,9 @@ pub fn run() {
       get_autosave_status,
       check_recovery_files,
       recover_from_autosave,
-      export_document_as_text
+      export_document_as_text,
+      export_document_as_png,
+      save_png_to_file
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

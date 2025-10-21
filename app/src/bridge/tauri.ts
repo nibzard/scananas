@@ -58,3 +58,11 @@ export async function exportDocumentAsText(doc: any, format: string, ordering?: 
   return invoke('export_document_as_text', { args: { doc, format, ordering } })
 }
 
+export async function exportDocumentAsPNG(scale: number): Promise<string> {
+  return invoke('export_document_as_png', { scale })
+}
+
+export async function savePngToFile(filePath: string, pngData: Uint8Array): Promise<void> {
+  return invoke('save_png_to_file', { filePath, pngData })
+}
+
