@@ -447,3 +447,46 @@ export class UpdateConnectionEndpointsCommand implements Command {
     }
   }
 }
+
+export class InsertNoteOnConnectionCommand implements Command {
+  description = 'Insert note on connection'
+  private readonly originalConnection: Connection
+  private readonly newNote: Note
+  private readonly firstNewConnection: Connection
+  private readonly secondNewConnection: Connection
+
+  constructor(
+    originalConnection: Connection,
+    newNote: Note,
+    firstNewConnection: Connection,
+    secondNewConnection: Connection
+  ) {
+    this.originalConnection = originalConnection
+    this.newNote = newNote
+    this.firstNewConnection = firstNewConnection
+    this.secondNewConnection = secondNewConnection
+  }
+
+  execute(doc: BoardDocument): BoardDocument {
+    return {
+      ...doc,
+      notes: [...doc.notes, this.newNote],
+      connections: [
+        ...doc.connections.filter(c => c.id !== this.originalConnection.id),
+        this.firstNewConnection,
+        this.secondNewConnection
+      ]
+    }
+  }
+
+  undo(doc: BoardDocument): BoardDocument {
+    return {
+      ...doc,
+      notes: doc.notes.filter(n => n.id !== this.newNote.id),
+      connections: [
+        ...doc.connections.filter(c => c.id !== this.firstNewConnection.id && c.id !== this.secondNewConnection.id),
+        this.originalConnection
+      ]
+    }
+  }
+}

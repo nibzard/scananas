@@ -12,7 +12,8 @@ import {
   DeleteConnectionCommand,
   UpdateNotesCommand,
   UpdateConnectionsCommand,
-  UpdateConnectionEndpointsCommand
+  UpdateConnectionEndpointsCommand,
+  InsertNoteOnConnectionCommand
 } from '../../state/commands'
 
 type Props = {
@@ -272,6 +273,73 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
       if (e.code === 'KeyM' && !editing && !editingConnection) {
         e.preventDefault()
         setMovementMode(prev => !prev)
+        return
+      }
+
+      // Insert note on connection (I key)
+      if (e.code === 'KeyI' && !editing && !editingConnection && selectedIds.length === 1) {
+        e.preventDefault()
+
+        // Check if the selected item is a connection
+        const selectedConnection = connections.find(c => c.id === selectedIds[0])
+        if (selectedConnection && onExecuteCommand) {
+          const srcNote = notes.find(n => n.id === selectedConnection.srcNoteId)
+          const dstNote = notes.find(n => n.id === selectedConnection.dstNoteId)
+
+          if (srcNote && dstNote) {
+            // Calculate midpoint for the new note
+            const midX = (srcNote.frame.x + dstNote.frame.x + dstNote.frame.w) / 2
+            const midY = (srcNote.frame.y + dstNote.frame.y + dstNote.frame.h) / 2
+
+            // Create new note at midpoint
+            const newNoteId = `note_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+            const newNote: Note = {
+              id: newNoteId,
+              text: '',
+              frame: {
+                x: midX - 60, // Default width/2
+                y: midY - 30, // Default height/2
+                w: 120,
+                h: 60
+              }
+            }
+
+            // Create two new connections
+            const firstConnectionId = `conn_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+            const secondConnectionId = `conn_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+
+            const firstNewConnection: Connection = {
+              id: firstConnectionId,
+              srcNoteId: selectedConnection.srcNoteId,
+              dstNoteId: newNoteId,
+              style: selectedConnection.style,
+              label: selectedConnection.label,
+              bendPoints: selectedConnection.bendPoints
+            }
+
+            const secondNewConnection: Connection = {
+              id: secondConnectionId,
+              srcNoteId: newNoteId,
+              dstNoteId: selectedConnection.dstNoteId,
+              style: selectedConnection.style
+            }
+
+            // Execute the command
+            const command = new InsertNoteOnConnectionCommand(
+              selectedConnection,
+              newNote,
+              firstNewConnection,
+              secondNewConnection
+            )
+            onExecuteCommand(command)
+
+            // Update selection to the new note
+            onSelectionChange?.([newNoteId])
+
+            // Start editing the new note
+            setEditing({ noteId: newNoteId, text: '' })
+          }
+        }
         return
       }
 
