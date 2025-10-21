@@ -112,17 +112,15 @@ Status: **Enhanced MVP with Production Improvements + Critical Fixes**. Core fun
 - Search and selection system with connected cluster analysis
 
 ### 🚧 **High Priority Missing MVP Features:**
-1. **Export System** (EXP-1) - PDF format exports (PNG export completed)
-2. **Background Shapes** (SHP-2) - Magnetic move behavior for shapes
-3. **Stacks System** (STK-1, STK-2, STK-3) - Hierarchical note organization
-4. **Performance Optimization** (CAN-2, CAN-3, PERF-1) - Spatial indexing for large documents
+1. **Background Shapes** (SHP-2) - Magnetic move behavior for shapes
+2. **Stacks System** (STK-1, STK-2, STK-3) - Hierarchical note organization
+3. **Performance Optimization** (CAN-2, CAN-3, PERF-1) - Spatial indexing for large documents
 
 ### 🎯 **Recommended Next Steps:**
-1. Complete PDF export functionality (highest user value - PNG export completed)
-2. Complete background shapes with magnetic behavior
-3. Build stacks system for hierarchical organization
-4. Optimize rendering performance
-5. Add accessibility features
+1. Complete background shapes with magnetic behavior
+2. Build stacks system for hierarchical organization
+3. Optimize rendering performance
+4. Add accessibility features
 
 ### 🏗️ **Architecture Health:**
 - **Security**: ✅ Excellent (capabilities restricted, no unsafe operations)
@@ -220,7 +218,7 @@ Status: **Enhanced MVP with Production Improvements + Critical Fixes**. Core fun
 - ZPF-3 [mvp] Presets: 50/100/200; Fit Selection/Board; fullscreen — owner: unassigned — status: todo
 
 ### 12) Export & Print
-- EXP-1 [mvp] PDF export (vector) with options — owner: unassigned — status: todo
+- EXP-1 [mvp] PDF export (vector) with options — owner: unassigned — status: done (completed 2025-10-21) ✅ **COMPLETED**: Full PDF export system with native file dialog integration, multiple page sizes (A3, A4, A5, Letter, Legal), orientation options (Auto, Portrait, Landscape), vector-based PDF export using jsPDF, proper error handling and validation, complete integration with existing export system
 - EXP-2 [mvp] PNG export (1x/2x/3x DPI) — owner: unassigned — status: done (completed 2025-10-21) ✅ **COMPLETED**: PNG export with DPI scaling (1x/2x/3x), native file dialogs, proper error handling, and integration with existing canvas export functionality
 - ✅ EXP-3 [mvp] TXT/RTF/OPML export per ordering heuristics — owner: niko — status: completed — **Complete export system with intelligent text ordering (spatial, connections, hierarchical), Tauri backend commands, and UI integration**
 - PRN-1 [mvp] Native print dialog; scale‑to‑fit; posterize — owner: unassigned — status: todo

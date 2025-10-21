@@ -83,6 +83,7 @@ export function Canvas({ notes, connections = [], shapes = [], selectedIds = [],
   const [movementMode, setMovementMode] = useState<boolean>(false)
   const [magneticActive, setMagneticActive] = useState<boolean>(false)
   const [magneticAffectedNotes, setMagneticAffectedNotes] = useState<string[]>([])
+  const [magneticGroupedNotes, setMagneticGroupedNotes] = useState<string[]>([]) // New: Track overlapped notes for group translation
   const lastClickTime = useRef<number>(0)
   const lastClickPos = useRef<Point>({ x: 0, y: 0 })
 
@@ -750,14 +751,22 @@ export function Canvas({ notes, connections = [], shapes = [], selectedIds = [],
       const isSelected = selectedIds.includes(n.id)
       const isMovementModeActive = movementMode && isSelected
       const isMagneticallyAffected = magneticActive && magneticAffectedNotes.includes(n.id)
+      const isMagneticallyGrouped = magneticActive && magneticGroupedNotes.includes(n.id) // New: Check if note is overlapped/grouped
 
+      // Enhanced visual feedback for SHP-2: Different colors for grouped vs proximity magnetic notes
       ctx.fillStyle = n.faded ? 'rgba(250,250,250,0.35)' :
                       isMovementModeActive ? 'rgba(74,163,255,0.1)' :
-                      isMagneticallyAffected ? 'rgba(255,193,7,0.15)' : '#fff'
+                      isMagneticallyGrouped ? 'rgba(220,53,69,0.15)' : // Red tint for overlapped/grouped notes
+                      isMagneticallyAffected ? 'rgba(255,193,7,0.15)' : // Yellow tint for proximity magnetic notes
+                      '#fff'
       ctx.strokeStyle = isMovementModeActive ? '#4aa3ff' :
-                        isMagneticallyAffected ? '#ffc107' :
+                        isMagneticallyGrouped ? '#dc3545' : // Red border for grouped notes
+                        isMagneticallyAffected ? '#ffc107' : // Yellow border for proximity magnetic notes
                         isSelected ? '#4aa3ff' : 'rgba(0,0,0,0.2)'
-      ctx.lineWidth = isMovementModeActive ? 3 : isMagneticallyAffected ? 2 : isSelected ? 2 : 1
+      ctx.lineWidth = isMovementModeActive ? 3 :
+                      isMagneticallyGrouped ? 3 : // Thicker border for grouped notes
+                      isMagneticallyAffected ? 2 :
+                      isSelected ? 2 : 1
       const radius = 8
       roundRect(ctx, r.x, r.y, r.w, r.h, radius)
       ctx.fill()
@@ -1166,8 +1175,8 @@ export function Canvas({ notes, connections = [], shapes = [], selectedIds = [],
             const hasMagneticEffect = magneticDx !== dx || magneticDy !== dy
             setMagneticActive(hasMagneticEffect)
 
-            // Apply magnetic movement to shapes and nearby notes
-            const { updatedShapes, updatedNotes, affectedNoteIds } = applyMagneticMovement(
+            // Apply magnetic movement to shapes and nearby notes (enhanced for SHP-2)
+            const { updatedShapes, updatedNotes, affectedNoteIds, groupedNoteIds } = applyMagneticMovement(
               shapes,
               notes,
               dragging.noteIds,
@@ -1177,6 +1186,7 @@ export function Canvas({ notes, connections = [], shapes = [], selectedIds = [],
 
             onShapesChange(updatedShapes)
             setMagneticAffectedNotes(affectedNoteIds)
+            setMagneticGroupedNotes(groupedNoteIds) // New: Track overlapped notes
 
             // Also update notes if they're affected by magnetic movement
             if (affectedNoteIds.length > 0 && onNotesChange) {
@@ -1467,6 +1477,7 @@ export function Canvas({ notes, connections = [], shapes = [], selectedIds = [],
       // Reset magnetic state
       setMagneticActive(false)
       setMagneticAffectedNotes([])
+      setMagneticGroupedNotes([]) // New: Reset grouped notes state
 
       // Call onDragEnd when dragging operations complete
       if (onDragEnd && (dragging?.type === 'move' || dragging?.type === 'resize')) {
@@ -1962,6 +1973,7 @@ function hitTestShapeResizeHandle(shape: BackgroundShape, pWorld: Point, toleran
 
 // Magnetic shape functionality
 const MAGNETIC_DISTANCE = 30 // Distance threshold for magnetic behavior in world coordinates
+const MAGNETIC_OVERLAP_THRESHOLD = 0.5 // Minimum overlap ratio for magnetic group translation (0.5 = 50% overlap)
 
 function findNotesNearShape(notes: Note[], shape: BackgroundShape): Note[] {
   const threshold = MAGNETIC_DISTANCE
@@ -1981,22 +1993,81 @@ function findNotesNearShape(notes: Note[], shape: BackgroundShape): Note[] {
   })
 }
 
+// New function: Find notes that actually overlap with shape (for group translation)
+function findNotesOverlappingShape(notes: Note[], shape: BackgroundShape): Note[] {
+  const shapeBounds = shape.frame
+
+  return notes.filter(note => {
+    const noteBounds = note.frame
+    return rectsIntersect(noteBounds, shapeBounds)
+  })
+}
+
+// New function: Calculate overlap area between two rectangles
+function calculateOverlapArea(a: Rect, b: Rect): number {
+  const x1 = Math.max(a.x, b.x)
+  const y1 = Math.max(a.y, b.y)
+  const x2 = Math.min(a.x + a.w, b.x + b.w)
+  const y2 = Math.min(a.y + a.h, b.y + b.h)
+
+  if (x1 < x2 && y1 < y2) {
+    return (x2 - x1) * (y2 - y1)
+  }
+  return 0
+}
+
+// New function: Calculate overlap ratio for magnetic group decisions
+function calculateOverlapRatio(noteBounds: Rect, shapeBounds: Rect): number {
+  const noteArea = noteBounds.w * noteBounds.h
+  const shapeArea = shapeBounds.w * shapeBounds.h
+  const overlapArea = calculateOverlapArea(noteBounds, shapeBounds)
+
+  if (noteArea === 0) return 0
+  return overlapArea / Math.min(noteArea, shapeArea)
+}
+
+// New function: Find overlapping shapes for shape-to-shape magnetic interactions
+function findShapesOverlappingShape(shapes: BackgroundShape[], targetShape: BackgroundShape): BackgroundShape[] {
+  return shapes.filter(shape => {
+    if (shape.id === targetShape.id) return false
+    return rectsIntersect(shape.frame, targetShape.frame)
+  })
+}
+
 function calculateMagneticSnap(
   shapeFrame: Rect,
   notes: Note[]
-): { dx: number; dy: number; shouldSnap: boolean } {
+): { dx: number; dy: number; shouldSnap: boolean; hasOverlapGroup: boolean } {
   if (notes.length === 0) {
-    return { dx: 0, dy: 0, shouldSnap: false }
+    return { dx: 0, dy: 0, shouldSnap: false, hasOverlapGroup: false }
   }
 
   let totalDx = 0
   let totalDy = 0
   let snapCount = 0
+  let hasOverlapGroup = false
 
   for (const note of notes) {
     const noteBounds = note.frame
     const shapeBounds = shapeFrame
 
+    // Check for overlap (new functionality for SHP-2)
+    const overlapRatio = calculateOverlapRatio(noteBounds, shapeBounds)
+    if (overlapRatio >= MAGNETIC_OVERLAP_THRESHOLD) {
+      hasOverlapGroup = true
+      // For overlapping notes, use stronger magnetic force to keep them grouped
+      const noteCenterX = noteBounds.x + noteBounds.w / 2
+      const noteCenterY = noteBounds.y + noteBounds.h / 2
+      const shapeCenterX = shapeBounds.x + shapeBounds.w / 2
+      const shapeCenterY = shapeBounds.y + shapeBounds.h / 2
+
+      totalDx += (noteCenterX - shapeCenterX) * 0.8 // Stronger force for overlap group
+      totalDy += (noteCenterY - shapeCenterY) * 0.8
+      snapCount++
+      continue
+    }
+
+    // Original proximity-based magnetic behavior
     // Calculate the distance between centers
     const shapeCenterX = shapeBounds.x + shapeBounds.w / 2
     const shapeCenterY = shapeBounds.y + shapeBounds.h / 2
@@ -2021,11 +2092,12 @@ function calculateMagneticSnap(
     return {
       dx: totalDx / snapCount,
       dy: totalDy / snapCount,
-      shouldSnap: true
+      shouldSnap: true,
+      hasOverlapGroup
     }
   }
 
-  return { dx: 0, dy: 0, shouldSnap: false }
+  return { dx: 0, dy: 0, shouldSnap: false, hasOverlapGroup }
 }
 
 function applyMagneticMovement(
@@ -2034,8 +2106,9 @@ function applyMagneticMovement(
   shapeIds: string[],
   dx: number,
   dy: number
-): { updatedShapes: BackgroundShape[]; updatedNotes: Note[]; affectedNoteIds: string[] } {
-  const updatedShapes = shapes.map(shape => {
+): { updatedShapes: BackgroundShape[]; updatedNotes: Note[]; affectedNoteIds: string[]; groupedNoteIds: string[] } {
+  // Enhanced for SHP-2: Handle shape-to-shape magnetic interactions
+  let finalUpdatedShapes = shapes.map(shape => {
     if (shapeIds.includes(shape.id) && shape.magnetic !== false) {
       const newFrame = {
         ...shape.frame,
@@ -2047,15 +2120,81 @@ function applyMagneticMovement(
     return shape
   })
 
-  // Find notes that should move with the shapes
+  // New: Check for shape-to-shape magnetic interactions
+  const additionalShapeMovements: Map<string, { dx: number; dy: number }> = new Map()
+
+  for (const movingShapeId of shapeIds) {
+    const movingShape = shapes.find(s => s.id === movingShapeId)
+    if (!movingShape || movingShape.magnetic === false) continue
+
+    const updatedMovingShape = finalUpdatedShapes.find(s => s.id === movingShapeId)!
+    const overlappingShapes = findShapesOverlappingShape(shapes, updatedMovingShape)
+
+    for (const overlappedShape of overlappingShapes) {
+      if (overlappedShape.magnetic === false || shapeIds.includes(overlappedShape.id)) continue
+
+      // Calculate overlap ratio for shape-to-shape interaction
+      const overlapRatio = calculateOverlapRatio(overlappedShape.frame, updatedMovingShape.frame)
+      if (overlapRatio >= MAGNETIC_OVERLAP_THRESHOLD) {
+        // Overlapping shapes should move together (new group translation for shapes)
+        const existingMovement = additionalShapeMovements.get(overlappedShape.id) || { dx: 0, dy: 0 }
+        additionalShapeMovements.set(overlappedShape.id, { dx: dx, dy: dy })
+      }
+    }
+  }
+
+  // Apply additional shape movements
+  if (additionalShapeMovements.size > 0) {
+    finalUpdatedShapes = finalUpdatedShapes.map(shape => {
+      const additionalMovement = additionalShapeMovements.get(shape.id)
+      if (additionalMovement) {
+        return {
+          ...shape,
+          frame: {
+            ...shape.frame,
+            x: shape.frame.x + additionalMovement.dx,
+            y: shape.frame.y + additionalMovement.dy
+          }
+        }
+      }
+      return shape
+    })
+  }
+
+  // Find notes that should move with the shapes (enhanced for SHP-2)
   const affectedNoteIds: string[] = []
+  const groupedNoteIds: string[] = [] // New: Track notes that are overlapped and should move as a group
+
   const updatedNotes = notes.map(note => {
-    // Check if note is near any moving shape
+    // Check if note overlaps with any moving shape (new overlap detection for SHP-2)
     for (const shapeId of shapeIds) {
       const shape = shapes.find(s => s.id === shapeId)
       if (shape && shape.magnetic !== false) {
-        const nearbyNotes = findNotesNearShape([note], { ...shape, frame: { ...shape.frame, x: shape.frame.x + dx, y: shape.frame.y + dy } })
-        if (nearbyNotes.length > 0) {
+        const updatedShape = finalUpdatedShapes.find(s => s.id === shapeId)!
+
+        // Check for overlap (new group translation logic)
+        const overlapRatio = calculateOverlapRatio(note.frame, updatedShape.frame)
+        if (overlapRatio >= MAGNETIC_OVERLAP_THRESHOLD) {
+          // This note overlaps with the moving shape - it MUST move with the shape
+          if (!groupedNoteIds.includes(note.id)) {
+            groupedNoteIds.push(note.id)
+          }
+          if (!affectedNoteIds.includes(note.id)) {
+            affectedNoteIds.push(note.id)
+          }
+          return {
+            ...note,
+            frame: {
+              ...note.frame,
+              x: note.frame.x + dx,
+              y: note.frame.y + dy
+            }
+          }
+        }
+
+        // Check for proximity-based magnetic behavior (original logic)
+        const nearbyNotes = findNotesNearShape([note], updatedShape)
+        if (nearbyNotes.length > 0 && !affectedNoteIds.includes(note.id)) {
           affectedNoteIds.push(note.id)
           return {
             ...note,
@@ -2068,8 +2207,50 @@ function applyMagneticMovement(
         }
       }
     }
+
+    // Also check notes against shapes that were moved due to shape-to-shape interactions
+    for (const [shapeId, movement] of additionalShapeMovements) {
+      const shape = shapes.find(s => s.id === shapeId)
+      if (shape && shape.magnetic !== false) {
+        const updatedShape = finalUpdatedShapes.find(s => s.id === shapeId)!
+
+        // Check for overlap with additionally moved shapes
+        const overlapRatio = calculateOverlapRatio(note.frame, updatedShape.frame)
+        if (overlapRatio >= MAGNETIC_OVERLAP_THRESHOLD) {
+          if (!groupedNoteIds.includes(note.id)) {
+            groupedNoteIds.push(note.id)
+          }
+          if (!affectedNoteIds.includes(note.id)) {
+            affectedNoteIds.push(note.id)
+          }
+          return {
+            ...note,
+            frame: {
+              ...note.frame,
+              x: note.frame.x + movement.dx,
+              y: note.frame.y + movement.dy
+            }
+          }
+        }
+
+        // Check for proximity with additionally moved shapes
+        const nearbyNotes = findNotesNearShape([note], updatedShape)
+        if (nearbyNotes.length > 0 && !affectedNoteIds.includes(note.id)) {
+          affectedNoteIds.push(note.id)
+          return {
+            ...note,
+            frame: {
+              ...note.frame,
+              x: note.frame.x + movement.dx,
+              y: note.frame.y + movement.dy
+            }
+          }
+        }
+      }
+    }
+
     return note
   })
 
-  return { updatedShapes, updatedNotes, affectedNoteIds }
+  return { updatedShapes: finalUpdatedShapes, updatedNotes, affectedNoteIds, groupedNoteIds }
 }
