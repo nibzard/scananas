@@ -10,7 +10,7 @@ import type { BoardDocument, BackgroundShape } from '../model/types'
 import { makeEmptyDoc } from '../state'
 import { useCommandStack } from '../hooks/useCommandStack'
 import { useAutosave } from '../hooks/useAutosave'
-import { openDocument, openSpecificDocument, saveDocument, checkRecoveryFiles, exportDocumentAsText, exportDocumentAsPNG, savePngToFile } from '../bridge/tauri'
+import { openDocument, openSpecificDocument, saveDocument, checkRecoveryFiles, exportDocumentAsText, exportDocumentAsPNG, savePngToFile, exportDocumentAsPDF, savePdfToFile } from '../bridge/tauri'
 import { exportToPNG, exportToTXT, exportToPDF, exportToRTF, exportToOPML, downloadFile, downloadText } from '../export/canvasExport'
 import { UpdateNotesCommand, UpdateConnectionsCommand, CreateShapesCommand, UpdateShapesCommand, SearchCommand } from '../state/commands'
 import { SearchResult, findConnectedCluster } from '../utils/search'
@@ -187,6 +187,7 @@ export function App() {
 
   const onExportPDF = async () => {
     try {
+      const filePath = await exportDocumentAsPDF(pdfPageSize, pdfOrientation)
       const blob = await exportToPDF(doc, {
         format: 'pdf',
         pageSize: pdfPageSize,
@@ -195,9 +196,10 @@ export function App() {
         includeFaded: true,
         margin: 50
       })
-      const filename = `fim-export-${Date.now()}.pdf`
-      await downloadFile(blob, filename)
-      console.log('PDF exported:', filename)
+      const arrayBuffer = await blob.arrayBuffer()
+      const uint8Array = new Uint8Array(arrayBuffer)
+      await savePdfToFile(filePath, uint8Array)
+      console.log('PDF exported:', filePath, `(${pdfPageSize} ${pdfOrientation})`)
     } catch (e) {
       console.warn('PDF export failed', e)
     }

@@ -66,3 +66,11 @@ export async function savePngToFile(filePath: string, pngData: Uint8Array): Prom
   return invoke('save_png_to_file', { filePath, pngData })
 }
 
+export async function exportDocumentAsPDF(pageSize: string, orientation: string): Promise<string> {
+  return invoke('export_document_as_pdf', { pageSize, orientation })
+}
+
+export async function savePdfToFile(filePath: string, pdfData: Uint8Array): Promise<void> {
+  return invoke('save_pdf_to_file', { filePath, pdfData })
+}
+

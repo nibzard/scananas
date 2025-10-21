@@ -528,6 +528,51 @@ async fn export_document_as_png(app: tauri::AppHandle, scale: f64) -> Result<Str
   Ok(path.to_string_lossy().to_string())
 }
 
+// PDF export command - handles file dialog and path selection
+#[tauri::command]
+async fn export_document_as_pdf(app: tauri::AppHandle, page_size: String, orientation: String) -> Result<String, String> {
+  use tauri_plugin_dialog::DialogExt;
+
+  // Validate page size
+  let valid_sizes = vec!["a3", "a4", "a5", "letter", "legal"];
+  if !valid_sizes.contains(&page_size.as_str()) {
+    return Err("Invalid page size. Must be one of: a3, a4, a5, letter, legal".to_string());
+  }
+
+  // Validate orientation
+  let valid_orientations = vec!["auto", "portrait", "landscape"];
+  if !valid_orientations.contains(&orientation.as_str()) {
+    return Err("Invalid orientation. Must be one of: auto, portrait, landscape".to_string());
+  }
+
+  let file_path = app.dialog()
+    .file()
+    .add_filter("PDF Files", &["pdf"])
+    .set_file_name(&format!("idea_map_{}_{}.pdf", page_size, orientation))
+    .set_title(&format!("Export as PDF ({} {})", page_size.to_uppercase(), orientation))
+    .blocking_save_file();
+
+  let path = match file_path {
+    Some(p) => match p.as_path() {
+      Some(path) => path.to_path_buf(),
+      None => return Err("Invalid save path selected".into()),
+    },
+    None => return Err("Export operation cancelled by user".into()),
+  };
+
+  Ok(path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+async fn save_pdf_to_file(file_path: String, pdf_data: Vec<u8>) -> Result<(), String> {
+  use std::fs;
+
+  fs::write(&file_path, pdf_data)
+    .map_err(|e| format!("Failed to write PDF file '{}': {}", file_path, e))?;
+
+  Ok(())
+}
+
 #[tauri::command]
 async fn save_png_to_file(file_path: String, png_data: Vec<u8>) -> Result<(), String> {
   use std::fs;
@@ -972,7 +1017,9 @@ pub fn run() {
       recover_from_autosave,
       export_document_as_text,
       export_document_as_png,
-      save_png_to_file
+      save_png_to_file,
+      export_document_as_pdf,
+      save_pdf_to_file
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
