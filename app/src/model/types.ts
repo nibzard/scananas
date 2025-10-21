@@ -38,6 +38,14 @@ export interface EmbeddedImage {
   path?: string
 }
 
+export interface ShapeStyle {
+  id: ID
+  fill?: string
+  border?: { color?: string; width?: number; style?: 'solid' | 'dotted' }
+  cornerRadius?: number
+  shadow?: boolean
+}
+
 export interface ConnectionStyle {
   kind?: 'dotted' | 'solid'
   arrows?: 'none' | 'src' | 'dst' | 'both'
@@ -92,6 +100,7 @@ export interface BoardDocument {
   shapes: BackgroundShape[]
   stacks: Stack[]
   noteStyles: NoteStyle[]
+  shapeStyles: ShapeStyle[]
   documentStyle?: DocumentStyle
   images?: EmbeddedImage[]
 }

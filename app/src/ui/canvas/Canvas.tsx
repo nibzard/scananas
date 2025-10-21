@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import type { Note, Rect, Point, Connection } from '../../model/types'
+import type { Note, Rect, Point, Connection, BackgroundShape } from '../../model/types'
 import type { Command } from '../../state/commands'
 import { parseMarkdown, type MarkdownSegment } from '../../utils/markdown'
 import {
@@ -13,18 +13,25 @@ import {
   UpdateNotesCommand,
   UpdateConnectionsCommand,
   UpdateConnectionEndpointsCommand,
-  InsertNoteOnConnectionCommand
+  InsertNoteOnConnectionCommand,
+  CreateShapesCommand,
+  DeleteShapesCommand,
+  MoveShapesCommand,
+  ResizeShapesCommand,
+  UpdateShapesCommand
 } from '../../state/commands'
 
 type Props = {
   notes: Note[]
   connections?: Connection[]
+  shapes?: BackgroundShape[]
   selectedIds?: string[]
   onSelectionChange?: (ids: string[]) => void
   onExecuteCommand?: (command: Command) => void
   // For continuous operations like dragging
   onNotesChange?: (notes: Note[]) => void
   onConnectionsChange?: (connections: Connection[]) => void
+  onShapesChange?: (shapes: BackgroundShape[]) => void
   onDragEnd?: () => void
   background?: string
 }
@@ -49,7 +56,7 @@ function rectToScreen(t: Transform, r: Rect) {
   return { x: topLeft.x, y: topLeft.y, w: r.w * t.scale, h: r.h * t.scale }
 }
 
-export function Canvas({ notes, connections = [], selectedIds = [], onSelectionChange, onExecuteCommand, onNotesChange, onConnectionsChange, onDragEnd, background = '#202124' }: Props) {
+export function Canvas({ notes, connections = [], shapes = [], selectedIds = [], onSelectionChange, onExecuteCommand, onNotesChange, onConnectionsChange, onShapesChange, onDragEnd, background = '#202124' }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const [transform, setTransform] = useState<Transform>({ scale: 1, tx: 0, ty: 0 })
   const [panning, setPanning] = useState(false)
@@ -226,8 +233,16 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
     const deletedConnections = connections.filter(conn =>
       selectedIds.includes(conn.srcNoteId) || selectedIds.includes(conn.dstNoteId)
     )
+    const deletedShapes = shapes.filter(shape => selectedIds.includes(shape.id))
 
-    onExecuteCommand(new DeleteNotesCommand(deletedNotes, deletedConnections))
+    // Create appropriate delete commands
+    if (deletedNotes.length > 0) {
+      onExecuteCommand(new DeleteNotesCommand(deletedNotes, deletedConnections))
+    }
+    if (deletedShapes.length > 0) {
+      onExecuteCommand(new DeleteShapesCommand(deletedShapes))
+    }
+
     onSelectionChange?.([])
   }
 
@@ -472,7 +487,7 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [movementMode, selectedIds, onExecuteCommand, onDragEnd, onNotesChange, notes])
+  }, [movementMode, selectedIds, onExecuteCommand, onDragEnd, onNotesChange, onShapesChange, notes, shapes])
 
   const draw = () => {
     const c = canvasRef.current
@@ -486,6 +501,36 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
     ctx.fillStyle = background
     ctx.fillRect(0, 0, width, height)
     ctx.restore()
+
+    // draw shapes (before notes for proper z-ordering)
+    for (const shape of shapes) {
+      const r = rectToScreen(transform, shape.frame)
+      const isSelected = selectedIds.includes(shape.id)
+
+      // Default shape styling
+      ctx.fillStyle = shape.styleId ? 'rgba(200,200,200,0.3)' : 'rgba(240,240,240,0.4)'
+      ctx.strokeStyle = isSelected ? '#4aa3ff' : 'rgba(0,0,0,0.3)'
+      ctx.lineWidth = isSelected ? 2 : 1
+
+      // Draw rounded rectangle for shape
+      const radius = (shape.radius || 8) * transform.scale
+      roundRect(ctx, r.x, r.y, r.w, r.h, radius)
+      ctx.fill()
+      ctx.stroke()
+
+      // Draw shape label if it exists
+      if (shape.label) {
+        ctx.save()
+        ctx.fillStyle = 'rgba(0,0,0,0.7)'
+        ctx.font = `${14 * transform.scale}px sans-serif`
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        const labelX = r.x + r.w / 2
+        const labelY = r.y + 20 * transform.scale // Position label near top
+        ctx.fillText(shape.label, labelX, labelY)
+        ctx.restore()
+      }
+    }
 
     // draw connections
     for (const conn of connections) {
@@ -656,19 +701,44 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
       if (selectedNote) {
         const r = rectToScreen(transform, selectedNote.frame)
         const handleSize = 8
-        
+
         ctx.fillStyle = '#4aa3ff'
         ctx.strokeStyle = '#fff'
         ctx.lineWidth = 1
-        
+
         // Southeast corner handle
         ctx.fillRect(r.x + r.w - handleSize/2, r.y + r.h - handleSize/2, handleSize, handleSize)
         ctx.strokeRect(r.x + r.w - handleSize/2, r.y + r.h - handleSize/2, handleSize, handleSize)
-        
+
         // East edge handle
         ctx.fillRect(r.x + r.w - handleSize/2, r.y + r.h/2 - handleSize/2, handleSize, handleSize)
         ctx.strokeRect(r.x + r.w - handleSize/2, r.y + r.h/2 - handleSize/2, handleSize, handleSize)
-        
+
+        // South edge handle
+        ctx.fillRect(r.x + r.w/2 - handleSize/2, r.y + r.h - handleSize/2, handleSize, handleSize)
+        ctx.strokeRect(r.x + r.w/2 - handleSize/2, r.y + r.h - handleSize/2, handleSize, handleSize)
+      }
+    }
+
+    // Draw resize handles for selected shapes (only if single selection)
+    if (selectedIds.length === 1) {
+      const selectedShape = shapes.find(s => s.id === selectedIds[0])
+      if (selectedShape) {
+        const r = rectToScreen(transform, selectedShape.frame)
+        const handleSize = 8
+
+        ctx.fillStyle = '#4aa3ff'
+        ctx.strokeStyle = '#fff'
+        ctx.lineWidth = 1
+
+        // Southeast corner handle
+        ctx.fillRect(r.x + r.w - handleSize/2, r.y + r.h - handleSize/2, handleSize, handleSize)
+        ctx.strokeRect(r.x + r.w - handleSize/2, r.y + r.h - handleSize/2, handleSize, handleSize)
+
+        // East edge handle
+        ctx.fillRect(r.x + r.w - handleSize/2, r.y + r.h/2 - handleSize/2, handleSize, handleSize)
+        ctx.strokeRect(r.x + r.w - handleSize/2, r.y + r.h/2 - handleSize/2, handleSize, handleSize)
+
         // South edge handle
         ctx.fillRect(r.x + r.w/2 - handleSize/2, r.y + r.h - handleSize/2, handleSize, handleSize)
         ctx.strokeRect(r.x + r.w/2 - handleSize/2, r.y + r.h - handleSize/2, handleSize, handleSize)
@@ -679,7 +749,7 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
   useEffect(() => {
     draw()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notes, connections, transform, selectedIds])
+  }, [notes, connections, shapes, transform, selectedIds])
 
   // Mouse interactions
   useEffect(() => {
@@ -722,6 +792,7 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
       const hit = hitTest(notes, world)
       const connectionHit = hitTestConnectionLabel(connections, notes, world, transform)
       const endpointHit = hitTestConnectionEndpoint(connections, notes, world, 12 / transform.scale)
+      const shapeHit = hitTestShape(shapes, world)
 
       // Check for connection label double-click
       if (connectionHit && timeSinceLastClick < 500 && distFromLastClick < 10) {
@@ -857,6 +928,73 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
           startFrames,
           sourceNoteId: dragType === 'connect' ? hit.id : undefined
         })
+      } else if (shapeHit) {
+        // Handle shape selection and interaction
+        let dragIds: string[]
+        if (selectedIds.includes(shapeHit.id)) {
+          // Clicked on already selected shape - drag all selected
+          dragIds = [...selectedIds]
+        } else {
+          // Clicked on unselected shape
+          if (e.shiftKey) {
+            const set = new Set(selectedIds)
+            set.add(shapeHit.id)
+            const newSelection = Array.from(set)
+            onSelectionChange?.(newSelection)
+            dragIds = [shapeHit.id] // Only drag the newly selected shape
+          } else {
+            onSelectionChange?.([shapeHit.id])
+            dragIds = [shapeHit.id]
+          }
+        }
+
+        // Check for resize handle on selected shapes first
+        if (selectedIds.length === 1 && selectedIds[0] === shapeHit.id) {
+          const resizeHandle = hitTestShapeResizeHandle(shapeHit, world, 12 / transform.scale)
+          if (resizeHandle) {
+            // Start resize operation
+            const startFrames = new Map<string, Rect>()
+            startFrames.set(shapeHit.id, { ...shapeHit.frame })
+
+            // Track initial state for undo/redo
+            continuousOperationType.current = 'resize'
+            initialNoteStates.current = new Map()
+            // Note: reusing initialNoteStates for shapes - could be renamed to initialStates
+
+            setDragging({
+              type: 'resize',
+              noteIds: [shapeHit.id],
+              startWorld: world,
+              startFrames,
+              resizeHandle
+            })
+            return
+          }
+        }
+
+        // Start dragging shapes
+        const startFrames = new Map<string, Rect>()
+        dragIds.forEach(id => {
+          const shape = shapes.find(s => s.id === id)
+          if (shape) startFrames.set(id, { ...shape.frame })
+        })
+
+        // Track initial state for undo/redo
+        continuousOperationType.current = 'move'
+        initialNoteStates.current = new Map()
+        dragIds.forEach(id => {
+          const shape = shapes.find(s => s.id === id)
+          if (shape) {
+            initialNoteStates.current!.set(id, shape as any) // Type hack for now
+          }
+        })
+
+        setDragging({
+          type: 'move',
+          noteIds: dragIds, // Reusing noteIds field for shapes
+          startWorld: world,
+          startFrames
+        })
       } else {
         setMarquee({ start: pos, end: pos, subtract: e.altKey })
       }
@@ -877,23 +1015,56 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
           const dx = currWorld.x - dragging.startWorld.x
           const dy = currWorld.y - dragging.startWorld.y
 
-          const updatedNotes = notes.map(note => {
-            if (dragging.noteIds.includes(note.id)) {
-              const startFrame = dragging.startFrames.get(note.id)
-              if (startFrame) {
-                return {
-                  ...note,
-                  frame: {
-                    ...startFrame,
-                    x: startFrame.x + dx,
-                    y: startFrame.y + dy
+          // Check if we're dragging notes or shapes
+          const isDraggingNote = dragging.noteIds.some(id => notes.find(n => n.id === id))
+
+          if (isDraggingNote) {
+            const updatedNotes = notes.map(note => {
+              if (dragging.noteIds.includes(note.id)) {
+                const startFrame = dragging.startFrames.get(note.id)
+                if (startFrame) {
+                  return {
+                    ...note,
+                    frame: {
+                      ...startFrame,
+                      x: startFrame.x + dx,
+                      y: startFrame.y + dy
+                    }
                   }
                 }
               }
-            }
-            return note
-          })
-          onNotesChange(updatedNotes)
+              return note
+            })
+            onNotesChange(updatedNotes)
+          }
+        }
+
+        // Handle shape dragging
+        if (dragging.type === 'move' && onShapesChange) {
+          const dx = currWorld.x - dragging.startWorld.x
+          const dy = currWorld.y - dragging.startWorld.y
+
+          const isDraggingShape = dragging.noteIds.some(id => shapes.find(s => s.id === id))
+
+          if (isDraggingShape) {
+            const updatedShapes = shapes.map(shape => {
+              if (dragging.noteIds.includes(shape.id)) {
+                const startFrame = dragging.startFrames.get(shape.id)
+                if (startFrame) {
+                  return {
+                    ...shape,
+                    frame: {
+                      ...startFrame,
+                      x: startFrame.x + dx,
+                      y: startFrame.y + dy
+                    }
+                  }
+                }
+              }
+              return shape
+            })
+            onShapesChange(updatedShapes)
+          }
         } else if (dragging.type === 'resize' && dragging.resizeHandle && onNotesChange) {
           const dx = currWorld.x - dragging.startWorld.x
           const dy = currWorld.y - dragging.startWorld.y
@@ -922,6 +1093,35 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
             return note
           })
           onNotesChange(updatedNotes)
+
+          // Handle shape resizing
+          const isDraggingShape = dragging.noteIds.some(id => shapes.find(s => s.id === id))
+          if (isDraggingShape && onShapesChange) {
+            const updatedShapes = shapes.map(shape => {
+              if (dragging.noteIds.includes(shape.id)) {
+                const startFrame = dragging.startFrames.get(shape.id)
+                if (startFrame) {
+                  let newFrame = { ...startFrame }
+
+                  if (dragging.resizeHandle === 'se') {
+                    // Southeast corner - resize both width and height
+                    newFrame.w = Math.max(100, startFrame.w + dx)
+                    newFrame.h = Math.max(60, startFrame.h + dy)
+                  } else if (dragging.resizeHandle === 'e') {
+                    // East edge - resize width only
+                    newFrame.w = Math.max(100, startFrame.w + dx)
+                  } else if (dragging.resizeHandle === 's') {
+                    // South edge - resize height only
+                    newFrame.h = Math.max(60, startFrame.h + dy)
+                  }
+
+                  return { ...shape, frame: newFrame }
+                }
+              }
+              return shape
+            })
+            onShapesChange(updatedShapes)
+          }
         } else if (dragging.type === 'move-connection-endpoint' && dragging.connectionId && dragging.originalConnection && onConnectionsChange) {
           // Find the target note at current position
           const targetNote = hitTest(notes, currWorld)
@@ -964,6 +1164,8 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
           newCursor = 'move'
         } else if (selectedIds.length === 1) {
           const selectedNote = notes.find(n => n.id === selectedIds[0])
+          const selectedShape = shapes.find(s => s.id === selectedIds[0])
+
           if (selectedNote) {
             const handle = hitTestResizeHandle(selectedNote, currWorld, 12 / transform.scale)
             if (handle === 'se') newCursor = 'se-resize'
@@ -973,13 +1175,24 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
               const hit = hitTest(notes, currWorld)
               if (hit) newCursor = movementMode ? 'move' : 'move'
             }
+          } else if (selectedShape) {
+            const handle = hitTestShapeResizeHandle(selectedShape, currWorld, 12 / transform.scale)
+            if (handle === 'se') newCursor = 'se-resize'
+            else if (handle === 'e') newCursor = 'e-resize'
+            else if (handle === 's') newCursor = 's-resize'
+            else {
+              const shapeHit = hitTestShape(shapes, currWorld)
+              if (shapeHit) newCursor = movementMode ? 'move' : 'move'
+            }
           } else {
             const hit = hitTest(notes, currWorld)
-            if (hit) newCursor = movementMode ? 'move' : 'move'
+            const shapeHit = hitTestShape(shapes, currWorld)
+            if (hit || shapeHit) newCursor = movementMode ? 'move' : 'move'
           }
         } else {
           const hit = hitTest(notes, currWorld)
-          if (hit) newCursor = movementMode ? 'move' : 'move'
+          const shapeHit = hitTestShape(shapes, currWorld)
+          if (hit || shapeHit) newCursor = movementMode ? 'move' : 'move'
         }
         setCursor(newCursor)
       }
@@ -1055,6 +1268,42 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
           }
         }
 
+        // Handle shape undo commands
+        if (dragging.type === 'move' && continuousOperationType.current === 'move' && initialNoteStates.current) {
+          const movements = new Map<string, { dx: number; dy: number }>()
+
+          dragging.noteIds.forEach(id => {
+            const initialState = initialNoteStates.current!.get(id)
+            const currentState = shapes.find(s => s.id === id)
+
+            if (initialState && currentState) {
+              movements.set(id, {
+                dx: currentState.frame.x - initialState.frame.x,
+                dy: currentState.frame.y - initialState.frame.y
+              })
+            }
+          })
+
+          // Only create command if there was actual movement
+          if (movements.size > 0 && Array.from(movements.values()).some(m => m.dx !== 0 || m.dy !== 0)) {
+            onExecuteCommand(new MoveShapesCommand(movements))
+          }
+        } else if (dragging.type === 'resize' && continuousOperationType.current === 'resize' && initialNoteStates.current) {
+          const shapeId = dragging.noteIds[0]
+          const initialState = initialNoteStates.current.get(shapeId)
+          const currentState = shapes.find(s => s.id === shapeId)
+
+          if (initialState && currentState) {
+            const oldFrame = initialState.frame
+            const newFrame = currentState.frame
+
+            // Only create command if there was actual resize
+            if (oldFrame.w !== newFrame.w || oldFrame.h !== newFrame.h) {
+              onExecuteCommand(new ResizeShapesCommand(shapeId, oldFrame, newFrame))
+            }
+          }
+        }
+
         // Reset tracking state
         continuousOperationType.current = null
         initialNoteStates.current = null
@@ -1070,7 +1319,9 @@ export function Canvas({ notes, connections = [], selectedIds = [], onSelectionC
       if (marquee) {
         const rect = toRect(marquee.start, marquee.end)
         const worldRect = screenRectToWorld(transform, rect)
-        const idsIn = notes.filter(n => rectsIntersect(n.frame, worldRect)).map(n => n.id)
+        const noteIdsIn = notes.filter(n => rectsIntersect(n.frame, worldRect)).map(n => n.id)
+        const shapeIdsIn = shapes.filter(s => rectsIntersect(s.frame, worldRect)).map(s => s.id)
+        const idsIn = [...noteIdsIn, ...shapeIdsIn]
         const curr = new Set(selectedIds)
         if (marquee.subtract) idsIn.forEach(id => curr.delete(id))
         else idsIn.forEach(id => curr.add(id))
@@ -1470,5 +1721,39 @@ function hitTestConnectionEndpoint(connections: Connection[], notes: Note[], pWo
       return { connection: conn, endpointType: 'destination' }
     }
   }
+  return null
+}
+
+function hitTestShape(shapes: BackgroundShape[], pWorld: Point): BackgroundShape | null {
+  for (let i = shapes.length - 1; i >= 0; i--) {
+    const shape = shapes[i]
+    const r = shape.frame
+    if (pWorld.x >= r.x && pWorld.x <= r.x + r.w && pWorld.y >= r.y && pWorld.y <= r.y + r.h) return shape
+  }
+  return null
+}
+
+function hitTestShapeResizeHandle(shape: BackgroundShape, pWorld: Point, tolerance = 8): 'se' | 'e' | 's' | null {
+  const r = shape.frame
+  const handleSize = tolerance
+
+  // Southeast corner handle
+  if (pWorld.x >= r.x + r.w - handleSize && pWorld.x <= r.x + r.w + handleSize &&
+      pWorld.y >= r.y + r.h - handleSize && pWorld.y <= r.y + r.h + handleSize) {
+    return 'se'
+  }
+
+  // East edge handle
+  if (pWorld.x >= r.x + r.w - handleSize && pWorld.x <= r.x + r.w + handleSize &&
+      pWorld.y >= r.y + handleSize && pWorld.y <= r.y + r.h - handleSize) {
+    return 'e'
+  }
+
+  // South edge handle
+  if (pWorld.x >= r.x + handleSize && pWorld.x <= r.x + r.w - handleSize &&
+      pWorld.y >= r.y + r.h - handleSize && pWorld.y <= r.y + r.h + handleSize) {
+    return 's'
+  }
+
   return null
 }

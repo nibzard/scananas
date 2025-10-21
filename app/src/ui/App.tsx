@@ -5,13 +5,13 @@ import { HelpOverlay } from './HelpOverlay'
 import { RecentFiles } from './RecentFiles'
 import { RecoveryDialog } from './RecoveryDialog'
 import { AutosaveIndicator } from './AutosaveIndicator'
-import type { BoardDocument } from '../model/types'
+import type { BoardDocument, BackgroundShape } from '../model/types'
 import { makeEmptyDoc } from '../state'
 import { useCommandStack } from '../hooks/useCommandStack'
 import { useAutosave } from '../hooks/useAutosave'
 import { openDocument, openSpecificDocument, saveDocument, checkRecoveryFiles, exportDocumentAsText } from '../bridge/tauri'
 import { exportToPNG, exportToTXT, exportToPDF, exportToRTF, exportToOPML, downloadFile, downloadText } from '../export/canvasExport'
-import { UpdateNotesCommand, UpdateConnectionsCommand } from '../state/commands'
+import { UpdateNotesCommand, UpdateConnectionsCommand, CreateShapesCommand, UpdateShapesCommand } from '../state/commands'
 
 interface AutosaveInfo {
   original_path: string
@@ -160,6 +160,17 @@ export function App() {
     }
   }
 
+  const onCreateShape = () => {
+    const newShape = {
+      id: `shape_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+      frame: { x: 200, y: 200, w: 200, h: 150 },
+      radius: 8,
+      label: 'Background Shape'
+    }
+    executeCommand(new CreateShapesCommand([newShape]))
+    setSelection([newShape.id])
+  }
+
   const onExportPDF = async () => {
     try {
       const blob = await exportToPDF(doc, {
@@ -259,6 +270,10 @@ export function App() {
           ↷ Redo
         </button>
         <div style={{ height: 24, width: 1, background: '#333', margin: '0 4px' }} />
+        <button onClick={onCreateShape} style={btnStyle} title="Create Background Shape">
+          ⬜ Shape
+        </button>
+        <div style={{ height: 24, width: 1, background: '#333', margin: '0 4px' }} />
         <button onClick={onExportPNG} style={btnStyle}>Export PNG</button>
         <button onClick={onExportPDF} style={btnStyle}>Export PDF</button>
         <select
@@ -341,6 +356,7 @@ export function App() {
           <Canvas
             notes={currentDoc.notes}
             connections={currentDoc.connections}
+            shapes={currentDoc.shapes}
             selectedIds={selection}
             onSelectionChange={setSelection}
             onExecuteCommand={executeCommand}
@@ -352,6 +368,10 @@ export function App() {
               // Update temporary state for continuous operations
               setTempDoc(prev => prev ? { ...prev, connections } : { ...doc, connections })
             }}
+            onShapesChange={(shapes) => {
+              // Update temporary state for continuous operations
+              setTempDoc(prev => prev ? { ...prev, shapes } : { ...doc, shapes })
+            }}
             onDragEnd={() => {
               // When drag ends, clear the temporary state
               setTempDoc(null)
@@ -362,6 +382,7 @@ export function App() {
           selectedIds={selection}
           notes={currentDoc.notes}
           connections={currentDoc.connections}
+          shapes={currentDoc.shapes}
           document={currentDoc}
           onNotesChange={(notes) => {
             // Find what changed and create undo commands
@@ -408,6 +429,31 @@ export function App() {
 
               const previousStates = updatedIds.map(id => currentDoc.connections.find(c => c.id === id)!).filter(Boolean)
               executeCommand(new UpdateConnectionsCommand(updatedIds, calculatedUpdates, previousStates))
+            }
+          }}
+          onShapesChange={(shapes) => {
+            // Find what changed and create undo commands
+            const updatedShapes = shapes.filter(newShape => {
+              const originalShape = currentDoc.shapes.find(s => s.id === newShape.id)
+              return originalShape && JSON.stringify(originalShape) !== JSON.stringify(newShape)
+            })
+
+            if (updatedShapes.length > 0) {
+              const updatedIds = updatedShapes.map(s => s.id)
+              const updates = updatedShapes[0] // Get the updates from first shape
+              const originalShape = currentDoc.shapes.find(s => s.id === updatedIds[0])!
+
+              // Calculate the updates by comparing properties
+              const calculatedUpdates: Partial<BackgroundShape> = {}
+              if (updates.label !== originalShape.label) calculatedUpdates.label = updates.label
+              if (updates.radius !== originalShape.radius) calculatedUpdates.radius = updates.radius
+              if (updates.magnetic !== originalShape.magnetic) calculatedUpdates.magnetic = updates.magnetic
+              if (JSON.stringify(updates.frame) !== JSON.stringify(originalShape.frame)) {
+                calculatedUpdates.frame = updates.frame
+              }
+
+              const previousStates = updatedIds.map(id => currentDoc.shapes.find(s => s.id === id)!).filter(Boolean)
+              executeCommand(new UpdateShapesCommand(updatedIds, calculatedUpdates, previousStates))
             }
           }}
           onDocumentChange={setDocument}

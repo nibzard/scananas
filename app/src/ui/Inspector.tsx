@@ -1,44 +1,58 @@
 import React, { useState } from 'react'
-import type { Note, Connection, BoardDocument } from '../model/types'
+import type { Note, Connection, BoardDocument, BackgroundShape } from '../model/types'
 import { hasMarkdownSyntax } from '../utils/markdown'
 
 interface InspectorProps {
   selectedIds: string[]
   notes: Note[]
   connections: Connection[]
+  shapes: BackgroundShape[]
   document: BoardDocument
   onNotesChange?: (notes: Note[]) => void
   onConnectionsChange?: (connections: Connection[]) => void
+  onShapesChange?: (shapes: BackgroundShape[]) => void
   onDocumentChange?: (doc: BoardDocument) => void
 }
 
-type Tab = 'note' | 'connection' | 'document'
+type Tab = 'note' | 'connection' | 'shape' | 'document'
 
-export function Inspector({ 
-  selectedIds, 
-  notes, 
-  connections, 
-  document, 
-  onNotesChange, 
-  onConnectionsChange, 
-  onDocumentChange 
+export function Inspector({
+  selectedIds,
+  notes,
+  connections,
+  shapes,
+  document,
+  onNotesChange,
+  onConnectionsChange,
+  onShapesChange,
+  onDocumentChange
 }: InspectorProps) {
   const [activeTab, setActiveTab] = useState<Tab>('note')
-  
+
   const selectedNotes = notes.filter(n => selectedIds.includes(n.id))
   const selectedConnections = connections.filter(c => selectedIds.includes(c.id))
+  const selectedShapes = shapes.filter(s => selectedIds.includes(s.id))
 
   const updateSelectedNotes = (updates: Partial<Note>) => {
     if (!onNotesChange) return
-    const updatedNotes = notes.map(note => 
+    const updatedNotes = notes.map(note =>
       selectedIds.includes(note.id) ? { ...note, ...updates } : note
     )
     onNotesChange(updatedNotes)
   }
 
+  const updateSelectedShapes = (updates: Partial<BackgroundShape>) => {
+    if (!onShapesChange) return
+    const updatedShapes = shapes.map(shape =>
+      selectedIds.includes(shape.id) ? { ...shape, ...updates } : shape
+    )
+    onShapesChange(updatedShapes)
+  }
+
   const tabs = [
     { id: 'note' as Tab, label: 'Note', count: selectedNotes.length },
     { id: 'connection' as Tab, label: 'Connection', count: selectedConnections.length },
+    { id: 'shape' as Tab, label: 'Shape', count: selectedShapes.length },
     { id: 'document' as Tab, label: 'Document', count: 1 }
   ]
 
@@ -88,15 +102,21 @@ export function Inspector({
           />
         )}
         {activeTab === 'connection' && (
-          <ConnectionPanel 
+          <ConnectionPanel
             selectedConnections={selectedConnections}
             onUpdate={(updates) => {
               if (!onConnectionsChange) return
-              const updatedConnections = connections.map(conn => 
+              const updatedConnections = connections.map(conn =>
                 selectedIds.includes(conn.id) ? { ...conn, ...updates } : conn
               )
               onConnectionsChange(updatedConnections)
             }}
+          />
+        )}
+        {activeTab === 'shape' && (
+          <ShapePanel
+            selectedShapes={selectedShapes}
+            onUpdate={updateSelectedShapes}
           />
         )}
         {activeTab === 'document' && (
@@ -436,6 +456,142 @@ function ConnectionPanel({ selectedConnections, onUpdate }: {
         />
         <div style={{ fontSize: 11, color: '#999', textAlign: 'center' }}>
           {style.width || 2}px
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ShapePanel({ selectedShapes, onUpdate }: {
+  selectedShapes: BackgroundShape[]
+  onUpdate: (updates: Partial<BackgroundShape>) => void
+}) {
+  if (selectedShapes.length === 0) {
+    return (
+      <div style={{ opacity: 0.6, fontSize: 14, textAlign: 'center', marginTop: 40 }}>
+        Select shapes to edit properties
+      </div>
+    )
+  }
+
+  const firstShape = selectedShapes[0]
+  const isMultiple = selectedShapes.length > 1
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ fontSize: 14, fontWeight: 'bold', marginBottom: 8 }}>
+        {isMultiple ? `${selectedShapes.length} shapes selected` : 'Shape Properties'}
+      </div>
+
+      {/* Label */}
+      {!isMultiple && (
+        <div>
+          <label style={{ display: 'block', fontSize: 12, marginBottom: 4, color: '#ccc' }}>
+            Label
+          </label>
+          <input
+            type="text"
+            value={firstShape.label || ''}
+            onChange={(e) => onUpdate({ label: e.target.value || undefined })}
+            placeholder="Enter shape label..."
+            style={inputStyle}
+          />
+        </div>
+      )}
+
+      {/* Corner Radius */}
+      <div>
+        <label style={{ display: 'block', fontSize: 12, marginBottom: 8, color: '#ccc' }}>
+          Corner Radius
+        </label>
+        <input
+          type="range"
+          min="0"
+          max="50"
+          value={firstShape.radius || 0}
+          onChange={(e) => onUpdate({ radius: parseInt(e.target.value) || 0 })}
+          style={{
+            width: '100%',
+            marginBottom: 4
+          }}
+        />
+        <div style={{ fontSize: 11, color: '#999', textAlign: 'center' }}>
+          {firstShape.radius || 0}px
+        </div>
+      </div>
+
+      {/* Magnetic Toggle */}
+      <div>
+        <label style={{ display: 'flex', alignItems: 'center', fontSize: 12, color: '#ccc', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={firstShape.magnetic || false}
+            onChange={(e) => onUpdate({ magnetic: e.target.checked })}
+            style={{ marginRight: 8 }}
+          />
+          Magnetic (notes snap to this shape)
+        </label>
+      </div>
+
+      {/* Dimensions */}
+      <div>
+        <label style={{ display: 'block', fontSize: 12, marginBottom: 8, color: '#ccc' }}>
+          Dimensions
+        </label>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div>
+            <label style={{ fontSize: 11, color: '#999' }}>Width</label>
+            <input
+              type="number"
+              value={Math.round(firstShape.frame.w)}
+              onChange={(e) => onUpdate({
+                frame: { ...firstShape.frame, w: parseInt(e.target.value) || 0 }
+              })}
+              style={inputStyle}
+            />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, color: '#999' }}>Height</label>
+            <input
+              type="number"
+              value={Math.round(firstShape.frame.h)}
+              onChange={(e) => onUpdate({
+                frame: { ...firstShape.frame, h: parseInt(e.target.value) || 0 }
+              })}
+              style={inputStyle}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Position */}
+      <div>
+        <label style={{ display: 'block', fontSize: 12, marginBottom: 8, color: '#ccc' }}>
+          Position
+        </label>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div>
+            <label style={{ fontSize: 11, color: '#999' }}>X</label>
+            <input
+              type="number"
+              value={Math.round(firstShape.frame.x)}
+              onChange={(e) => onUpdate({
+                frame: { ...firstShape.frame, x: parseInt(e.target.value) || 0 }
+              })}
+              style={inputStyle}
+            />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, color: '#999' }}>Y</label>
+            <input
+              type="number"
+              value={Math.round(firstShape.frame.y)}
+              onChange={(e) => onUpdate({
+                frame: { ...firstShape.frame, y: parseInt(e.target.value) || 0 }
+              })}
+              style={inputStyle}
+            />
+          </div>
         </div>
       </div>
     </div>

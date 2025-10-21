@@ -1,4 +1,4 @@
-import type { BoardDocument, Note, Connection } from '../model/types'
+import type { BoardDocument, Note, Connection, BackgroundShape } from '../model/types'
 
 // Base command interface
 export interface Command {
@@ -487,6 +487,195 @@ export class InsertNoteOnConnectionCommand implements Command {
         ...doc.connections.filter(c => c.id !== this.firstNewConnection.id && c.id !== this.secondNewConnection.id),
         this.originalConnection
       ]
+    }
+  }
+}
+
+// Shape commands
+
+export class CreateShapesCommand implements Command {
+  description = 'Create shapes'
+  private readonly newShapes: BackgroundShape[]
+
+  constructor(shapes: BackgroundShape[]) {
+    this.newShapes = shapes
+  }
+
+  execute(doc: BoardDocument): BoardDocument {
+    return {
+      ...doc,
+      shapes: [...doc.shapes, ...this.newShapes]
+    }
+  }
+
+  undo(doc: BoardDocument): BoardDocument {
+    const newIds = new Set(this.newShapes.map(s => s.id))
+    return {
+      ...doc,
+      shapes: doc.shapes.filter(s => !newIds.has(s.id))
+    }
+  }
+}
+
+export class DeleteShapesCommand implements Command {
+  description = 'Delete shapes'
+  private readonly deletedShapes: BackgroundShape[]
+
+  constructor(deletedShapes: BackgroundShape[]) {
+    this.deletedShapes = deletedShapes
+  }
+
+  execute(doc: BoardDocument): BoardDocument {
+    const deletedIds = new Set(this.deletedShapes.map(s => s.id))
+    return {
+      ...doc,
+      shapes: doc.shapes.filter(s => !deletedIds.has(s.id))
+    }
+  }
+
+  undo(doc: BoardDocument): BoardDocument {
+    return {
+      ...doc,
+      shapes: [...doc.shapes, ...this.deletedShapes]
+    }
+  }
+}
+
+export class MoveShapesCommand implements Command {
+  description = 'Move shapes'
+  private readonly shapeMovements: Map<string, { dx: number; dy: number }>
+
+  constructor(movements: Map<string, { dx: number; dy: number }>) {
+    this.shapeMovements = movements
+  }
+
+  execute(doc: BoardDocument): BoardDocument {
+    return {
+      ...doc,
+      shapes: doc.shapes.map(shape => {
+        const movement = this.shapeMovements.get(shape.id)
+        if (movement) {
+          return {
+            ...shape,
+            frame: {
+              ...shape.frame,
+              x: shape.frame.x + movement.dx,
+              y: shape.frame.y + movement.dy
+            }
+          }
+        }
+        return shape
+      })
+    }
+  }
+
+  undo(doc: BoardDocument): BoardDocument {
+    return {
+      ...doc,
+      shapes: doc.shapes.map(shape => {
+        const movement = this.shapeMovements.get(shape.id)
+        if (movement) {
+          return {
+            ...shape,
+            frame: {
+              ...shape.frame,
+              x: shape.frame.x - movement.dx,
+              y: shape.frame.y - movement.dy
+            }
+          }
+        }
+        return shape
+      })
+    }
+  }
+
+  canCoalesceWith(command: Command): boolean {
+    return command instanceof MoveShapesCommand &&
+           command.shapeMovements.size === this.shapeMovements.size &&
+           Array.from(command.shapeMovements.keys()).every(id => this.shapeMovements.has(id))
+  }
+
+  coalesce(command: MoveShapesCommand): MoveShapesCommand {
+    const coalescedMovements = new Map<string, { dx: number; dy: number }>()
+
+    // Sum the movements for each shape
+    for (const [id, movement] of this.shapeMovements) {
+      const otherMovement = command.shapeMovements.get(id)
+      if (otherMovement) {
+        coalescedMovements.set(id, {
+          dx: movement.dx + otherMovement.dx,
+          dy: movement.dy + otherMovement.dy
+        })
+      }
+    }
+
+    return new MoveShapesCommand(coalescedMovements)
+  }
+}
+
+export class ResizeShapesCommand implements Command {
+  description = 'Resize shape'
+  private readonly shapeId: string
+  private readonly oldFrame: { x: number; y: number; w: number; h: number }
+  private readonly newFrame: { x: number; y: number; w: number; h: number }
+
+  constructor(shapeId: string, oldFrame: { x: number; y: number; w: number; h: number }, newFrame: { x: number; y: number; w: number; h: number }) {
+    this.shapeId = shapeId
+    this.oldFrame = oldFrame
+    this.newFrame = newFrame
+  }
+
+  execute(doc: BoardDocument): BoardDocument {
+    return {
+      ...doc,
+      shapes: doc.shapes.map(shape =>
+        shape.id === this.shapeId
+          ? { ...shape, frame: this.newFrame }
+          : shape
+      )
+    }
+  }
+
+  undo(doc: BoardDocument): BoardDocument {
+    return {
+      ...doc,
+      shapes: doc.shapes.map(shape =>
+        shape.id === this.shapeId
+          ? { ...shape, frame: this.oldFrame }
+          : shape
+      )
+    }
+  }
+}
+
+export class UpdateShapesCommand implements Command {
+  description = 'Update shape properties'
+  private readonly shapeIds: string[]
+  private readonly updates: Partial<BackgroundShape>
+  private readonly previousStates: BackgroundShape[]
+
+  constructor(shapeIds: string[], updates: Partial<BackgroundShape>, previousStates: BackgroundShape[]) {
+    this.shapeIds = shapeIds
+    this.updates = updates
+    this.previousStates = previousStates
+  }
+
+  execute(doc: BoardDocument): BoardDocument {
+    return {
+      ...doc,
+      shapes: doc.shapes.map(shape =>
+        this.shapeIds.includes(shape.id) ? { ...shape, ...this.updates } : shape
+      )
+    }
+  }
+
+  undo(doc: BoardDocument): BoardDocument {
+    const idToPrevious = new Map(this.previousStates.map(s => [s.id, s]))
+    return {
+      ...doc,
+      shapes: doc.shapes.map(shape =>
+        idToPrevious.has(shape.id) ? idToPrevious.get(shape.id)! : shape
+      )
     }
   }
 }

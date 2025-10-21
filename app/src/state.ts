@@ -9,6 +9,7 @@ export function makeEmptyDoc(): BoardDocument {
     shapes: [],
     stacks: [],
     noteStyles: [],
+    shapeStyles: [],
   }
 }
 
