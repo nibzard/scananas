@@ -60,6 +60,7 @@ export function App() {
   const [textOrdering, setTextOrdering] = React.useState<'spatial' | 'connections' | 'hierarchical'>('spatial')
   const [pdfPageSize, setPdfPageSize] = React.useState<'a3' | 'a4' | 'a5' | 'letter' | 'legal'>('a4')
   const [pdfOrientation, setPdfOrientation] = React.useState<'auto' | 'portrait' | 'landscape'>('auto')
+  const [pngDPI, setPngDPI] = React.useState<1 | 2 | 3>(2)
 
   // Initialize autosave functionality
   const {
@@ -124,10 +125,10 @@ export function App() {
 
   const onExportPNG = async () => {
     try {
-      const blob = await exportToPNG(doc, { format: 'png', scale: 2 })
-      const filename = `fim-export-${Date.now()}.png`
+      const blob = await exportToPNG(doc, { format: 'png', scale: pngDPI })
+      const filename = `fim-export-${Date.now()}-${pngDPI}x.png`
       await downloadFile(blob, filename)
-      console.log('PNG exported:', filename)
+      console.log('PNG exported:', filename, `at ${pngDPI}x DPI`)
     } catch (e) {
       console.warn('PNG export failed', e)
     }
@@ -275,6 +276,24 @@ export function App() {
         </button>
         <div style={{ height: 24, width: 1, background: '#333', margin: '0 4px' }} />
         <button onClick={onExportPNG} style={btnStyle}>Export PNG</button>
+        <select
+          value={pngDPI}
+          onChange={(e) => setPngDPI(parseInt(e.target.value) as 1 | 2 | 3)}
+          style={{
+            background: '#222',
+            color: '#eee',
+            border: '1px solid #555',
+            padding: '2px 6px',
+            fontSize: '12px',
+            borderRadius: '3px',
+            marginRight: '4px'
+          }}
+          title="PNG export DPI"
+        >
+          <option value="1">1x DPI</option>
+          <option value="2">2x DPI</option>
+          <option value="3">3x DPI</option>
+        </select>
         <button onClick={onExportPDF} style={btnStyle}>Export PDF</button>
         <select
           value={pdfPageSize}
