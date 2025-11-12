@@ -7,6 +7,9 @@ import { IncrementalSearch } from './IncrementalSearch'
 import { RecentFiles } from './RecentFiles'
 import { RecoveryDialog } from './RecoveryDialog'
 import { AutosaveIndicator } from './AutosaveIndicator'
+import { ModernToolbar } from './components/ModernToolbar'
+import { MagicalCanvas } from './components/MagicalCanvas'
+import { ModernInspector } from './components/ModernInspector'
 import type { BoardDocument, BackgroundShape } from '../model/types'
 import { makeEmptyDoc } from '../state'
 import { useCommandStack } from '../hooks/useCommandStack'
@@ -394,156 +397,82 @@ export function App() {
   }, [onSave, onOpen, onForceAutosave, selection, executeCommand])
 
   return (
-    <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', gap: 8, padding: '8px 12px', background: '#111', color: '#eee', alignItems: 'center' }}>
-        <button onClick={onOpen} style={btnStyle}>Open…</button>
-        <RecentFiles onOpenRecentFile={onOpenRecentFile} />
-        <button onClick={onSave} style={btnStyle}>Save As…</button>
-        {currentFilePath && (
-          <>
-            <div style={{ height: 24, width: 1, background: '#333', margin: '0 4px' }} />
-            <button onClick={onForceAutosave} style={{ ...btnStyle, background: '#28a745', fontSize: '12px' }} title="Force Autosave (Ctrl+Shift+S)">
-              💾 Autosave Now
-            </button>
-          </>
-        )}
-        <div style={{ height: 24, width: 1, background: '#333', margin: '0 4px' }} />
-        <button onClick={undo} disabled={!canUndo} style={{ ...btnStyle, opacity: canUndo ? 1 : 0.5 }} title={`Undo ${undoDescription || ''} (Ctrl+Z)`}>
-          ↶ Undo
-        </button>
-        <button onClick={redo} disabled={!canRedo} style={{ ...btnStyle, opacity: canRedo ? 1 : 0.5 }} title={`Redo ${redoDescription || ''} (Ctrl+Shift+Z)`}>
-          ↷ Redo
-        </button>
-        <div style={{ height: 24, width: 1, background: '#333', margin: '0 4px' }} />
-        <button onClick={onCreateShape} style={btnStyle} title="Create Background Shape">
-          ⬜ Shape
-        </button>
-        <div style={{ height: 24, width: 1, background: '#333', margin: '0 4px' }} />
-        <button onClick={onExportPNG} style={btnStyle}>Export PNG</button>
-        <select
-          value={pngDPI}
-          onChange={(e) => setPngDPI(parseInt(e.target.value) as 1 | 2 | 3)}
-          style={{
-            background: '#222',
-            color: '#eee',
-            border: '1px solid #555',
-            padding: '2px 6px',
-            fontSize: '12px',
-            borderRadius: '3px',
-            marginRight: '4px'
-          }}
-          title="PNG export DPI"
-        >
-          <option value="1">1x DPI</option>
-          <option value="2">2x DPI</option>
-          <option value="3">3x DPI</option>
-        </select>
-        <button onClick={onExportPDF} style={btnStyle}>Export PDF</button>
-        <select
-          value={pdfPageSize}
-          onChange={(e) => setPdfPageSize(e.target.value as 'a3' | 'a4' | 'a5' | 'letter' | 'legal')}
-          style={{
-            background: '#222',
-            color: '#eee',
-            border: '1px solid #555',
-            padding: '2px 6px',
-            fontSize: '12px',
-            borderRadius: '3px',
-            marginRight: '4px'
-          }}
-          title="PDF page size"
-        >
-          <option value="a4">A4</option>
-          <option value="a3">A3</option>
-          <option value="a5">A5</option>
-          <option value="letter">Letter</option>
-          <option value="legal">Legal</option>
-        </select>
-        <select
-          value={pdfOrientation}
-          onChange={(e) => setPdfOrientation(e.target.value as 'auto' | 'portrait' | 'landscape')}
-          style={{
-            background: '#222',
-            color: '#eee',
-            border: '1px solid #555',
-            padding: '2px 6px',
-            fontSize: '12px',
-            borderRadius: '3px'
-          }}
-          title="PDF orientation"
-        >
-          <option value="auto">Auto</option>
-          <option value="portrait">Portrait</option>
-          <option value="landscape">Landscape</option>
-        </select>
-        <div style={{ height: 24, width: 1, background: '#333', margin: '0 4px' }} />
-        <select
-          value={textOrdering}
-          onChange={(e) => setTextOrdering(e.target.value as 'spatial' | 'connections' | 'hierarchical')}
-          style={{
-            background: '#222',
-            color: '#eee',
-            border: '1px solid #555',
-            padding: '2px 6px',
-            fontSize: '12px',
-            borderRadius: '3px'
-          }}
-          title="Text ordering heuristic"
-        >
-          <option value="spatial">Spatial Order</option>
-          <option value="connections">Connection Order</option>
-          <option value="hierarchical">Hierarchical Order</option>
-        </select>
-        <button onClick={() => onExportTXT(textOrdering)} style={btnStyle}>Export TXT</button>
-        <button onClick={() => onExportRTF(textOrdering)} style={btnStyle}>Export RTF</button>
-        <button onClick={() => onExportOPML(textOrdering)} style={btnStyle}>Export OPML</button>
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button onClick={() => setShowHelp(true)} style={{ ...btnStyle, background: '#333' }}>
-            Help (?)
-          </button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: 0.7, fontSize: 12 }}>
-            <span>schema v{doc.schemaVersion}</span>
-            {currentFilePath && (
-              <>
-                <span>|</span>
-                <span style={{ color: isDirty ? '#ffa500' : '#4caf50' }}>
-                  {isDirty ? '●' : '○'} {currentFilePath.split('/').pop() || currentFilePath}
-                </span>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-      <div style={{ flex: 1, display: 'flex' }}>
+    <div style={{ 
+      width: '100vw', 
+      height: '100vh', 
+      display: 'flex', 
+      flexDirection: 'column',
+      background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)'
+    }}>
+      <ModernToolbar
+        onOpen={onOpen}
+        onSave={onSave}
+        onForceAutosave={currentFilePath ? onForceAutosave : undefined}
+        showAutosave={Boolean(currentFilePath)}
+        onUndo={undo}
+        onRedo={redo}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        undoDescription={undoDescription}
+        redoDescription={redoDescription}
+        onCreateShape={onCreateShape}
+        onExportPNG={onExportPNG}
+        onExportPDF={onExportPDF}
+        pngDPI={pngDPI}
+        setPngDPI={setPngDPI}
+        pdfPageSize={pdfPageSize}
+        setPdfPageSize={setPdfPageSize}
+        pdfOrientation={pdfOrientation}
+        setPdfOrientation={setPdfOrientation}
+        textOrdering={textOrdering}
+        setTextOrdering={setTextOrdering}
+        onExportTXT={() => onExportTXT(textOrdering)}
+        onExportRTF={() => onExportRTF(textOrdering)}
+        onExportOPML={() => onExportOPML(textOrdering)}
+        currentFilePath={currentFilePath}
+        isDirty={isDirty}
+        schemaVersion={doc.schemaVersion}
+        onShowHelp={() => setShowHelp(true)}
+        recentFilesComponent={<RecentFiles onOpenRecentFile={onOpenRecentFile} />}
+      />
+      <div style={{ 
+        flex: 1, 
+        display: 'flex',
+        gap: '1px',
+        padding: '1px'
+      }}>
         <div style={{ flex: 1 }}>
-          <Canvas
-            notes={currentDoc.notes}
-            connections={currentDoc.connections}
-            shapes={currentDoc.shapes}
-            stacks={currentDoc.stacks}
-            selectedIds={selection}
-            onSelectionChange={setSelection}
-            onExecuteCommand={executeCommand}
-            onNotesChange={(notes) => {
-              // Update temporary state for continuous operations
-              setTempDoc(prev => prev ? { ...prev, notes } : { ...doc, notes })
-            }}
-            onConnectionsChange={(connections) => {
-              // Update temporary state for continuous operations
-              setTempDoc(prev => prev ? { ...prev, connections } : { ...doc, connections })
-            }}
-            onShapesChange={(shapes) => {
-              // Update temporary state for continuous operations
-              setTempDoc(prev => prev ? { ...prev, shapes } : { ...doc, shapes })
-            }}
-            onDragEnd={() => {
-              // When drag ends, clear the temporary state
-              setTempDoc(null)
-            }}
-            highlightedSearchResult={highlightedSearchResult}
-          />
+          <MagicalCanvas>
+            <Canvas
+              notes={currentDoc.notes}
+              connections={currentDoc.connections}
+              shapes={currentDoc.shapes}
+              stacks={currentDoc.stacks}
+              selectedIds={selection}
+              onSelectionChange={setSelection}
+              onExecuteCommand={executeCommand}
+              onNotesChange={(notes) => {
+                // Update temporary state for continuous operations
+                setTempDoc(prev => prev ? { ...prev, notes } : { ...doc, notes })
+              }}
+              onConnectionsChange={(connections) => {
+                // Update temporary state for continuous operations
+                setTempDoc(prev => prev ? { ...prev, connections } : { ...doc, connections })
+              }}
+              onShapesChange={(shapes) => {
+                // Update temporary state for continuous operations
+                setTempDoc(prev => prev ? { ...prev, shapes } : { ...doc, shapes })
+              }}
+              onDragEnd={() => {
+                // When drag ends, clear the temporary state
+                setTempDoc(null)
+              }}
+              highlightedSearchResult={highlightedSearchResult}
+            />
+          </MagicalCanvas>
         </div>
-        <Inspector
+        <ModernInspector title="Properties">
+          <Inspector
           selectedIds={selection}
           notes={currentDoc.notes}
           connections={currentDoc.connections}
@@ -622,7 +551,8 @@ export function App() {
             }
           }}
           onDocumentChange={setDocument}
-        />
+          />
+        </ModernInspector>
       </div>
       <HelpOverlay isVisible={showHelp} onClose={() => setShowHelp(false)} />
       <SearchDialog

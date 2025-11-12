@@ -833,38 +833,198 @@ export function Canvas({ notes, connections = [], shapes = [], stacks = [], sele
       ctx.stroke()
     }
 
-    // draw notes
+    // Draw modern stack visual backgrounds first
+    for (const stack of stacks) {
+      if (stack.noteIds.length === 0) continue
+      
+      const stackNotes = notes.filter(note => stack.noteIds.includes(note.id))
+      if (stackNotes.length === 0) continue
+      
+      // Calculate stack bounds with indentation
+      const stackBounds = stackNotes.reduce((bounds, note) => {
+        const noteIndent = (stack.indentLevels?.[note.id] || 0) * 20 // 20px per indent level
+        const left = note.frame.x - noteIndent
+        const right = note.frame.x + note.frame.w
+        const top = note.frame.y
+        const bottom = note.frame.y + note.frame.h
+        
+        return {
+          left: Math.min(bounds.left, left),
+          right: Math.max(bounds.right, right),
+          top: Math.min(bounds.top, top),
+          bottom: Math.max(bounds.bottom, bottom)
+        }
+      }, { left: Infinity, right: -Infinity, top: Infinity, bottom: -Infinity })
+      
+      // Modern stack background with glassmorphism effect
+      const padding = 16
+      const stackRect = rectToScreen(transform, {
+        x: stackBounds.left - padding,
+        y: stackBounds.top - padding,
+        w: stackBounds.right - stackBounds.left + padding * 2,
+        h: stackBounds.bottom - stackBounds.top + padding * 2
+      })
+      
+      // Background gradient
+      const gradient = ctx.createLinearGradient(stackRect.x, stackRect.y, stackRect.x, stackRect.y + stackRect.h)
+      gradient.addColorStop(0, 'rgba(59, 130, 246, 0.08)')
+      gradient.addColorStop(1, 'rgba(79, 70, 229, 0.04)')
+      ctx.fillStyle = gradient
+      
+      // Modern border
+      ctx.strokeStyle = 'rgba(59, 130, 246, 0.3)'
+      ctx.lineWidth = 2
+      ctx.setLineDash([8, 4])
+      
+      // Draw with modern rounded corners
+      roundRect(ctx, stackRect.x, stackRect.y, stackRect.w, stackRect.h, 12)
+      ctx.fill()
+      ctx.stroke()
+      ctx.setLineDash([])
+      
+      // Modern stack label with improved typography
+      const stackLabel = `Stack • ${stack.noteIds.length} notes`
+      ctx.save()
+      ctx.fillStyle = 'rgba(59, 130, 246, 0.8)'
+      ctx.font = `500 ${Math.max(11, 13 * transform.scale)}px system-ui, -apple-system, sans-serif`
+      
+      // Add subtle text shadow
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.2)'
+      ctx.shadowBlur = 4
+      ctx.shadowOffsetY = 1
+      
+      const labelPadding = 12
+      ctx.fillText(stackLabel, stackRect.x + labelPadding, stackRect.y + 20 * transform.scale)
+      ctx.restore()
+    }
+
+    // draw notes with stack-aware positioning
     for (const n of notes) {
-      const r = rectToScreen(transform, n.frame)
-      // note fill
+      // Calculate visual position with indentation
+      let visualFrame = { ...n.frame }
+      
+      // Apply stack indentation if note is in a stack
+      if (n.stackId) {
+        const stack = stacks.find(s => s.id === n.stackId)
+        if (stack && stack.indentLevels) {
+          const indentLevel = stack.indentLevels[n.id] || 0
+          const indentOffset = indentLevel * 20 // 20px per indent level
+          visualFrame = {
+            ...visualFrame,
+            x: visualFrame.x + indentOffset
+          }
+        }
+      }
+      
+      const r = rectToScreen(transform, visualFrame)
+      
+      // Note state detection
       const isSelected = selectedIds.includes(n.id)
       const isMovementModeActive = movementMode && isSelected
       const isMagneticallyAffected = magneticActive && magneticAffectedNotes.includes(n.id)
-      const isMagneticallyGrouped = magneticActive && magneticGroupedNotes.includes(n.id) // New: Check if note is overlapped/grouped
+      const isMagneticallyGrouped = magneticActive && magneticGroupedNotes.includes(n.id)
       const isSearchHighlighted = highlightedSearchResult && highlightedSearchResult.id === n.id && highlightedSearchResult.type === 'note'
+      const isInStack = Boolean(n.stackId)
+      
+      // Modern shadow effect for depth
+      if (!n.faded && (isSelected || isMovementModeActive || isSearchHighlighted)) {
+        const shadowOffset = isSelected ? 12 : 6
+        const shadowAlpha = isSelected ? 0.3 : 0.15
+        
+        ctx.save()
+        ctx.shadowColor = `rgba(0, 0, 0, ${shadowAlpha})`
+        ctx.shadowBlur = shadowOffset * 2
+        ctx.shadowOffsetX = 0
+        ctx.shadowOffsetY = shadowOffset * 0.5
+        
+        // Draw shadow shape
+        roundRect(ctx, r.x, r.y, r.w, r.h, 12)
+        ctx.fillStyle = 'transparent'
+        ctx.fill()
+        ctx.restore()
+      }
 
-      // Enhanced visual feedback for SHP-2: Different colors for grouped vs proximity magnetic notes
-      // SRCH-1: Add search highlighting with yellow glow effect
-      ctx.fillStyle = n.faded ? 'rgba(250,250,250,0.35)' :
-                      isSearchHighlighted ? 'rgba(255,235,59,0.3)' : // Yellow highlight for search results
-                      isMovementModeActive ? 'rgba(74,163,255,0.1)' :
-                      isMagneticallyGrouped ? 'rgba(220,53,69,0.15)' : // Red tint for overlapped/grouped notes
-                      isMagneticallyAffected ? 'rgba(255,193,7,0.15)' : // Yellow tint for proximity magnetic notes
-                      '#fff'
-      ctx.strokeStyle = isSearchHighlighted ? '#fbc02d' : // Bright yellow border for search results
-                        isMovementModeActive ? '#4aa3ff' :
-                        isMagneticallyGrouped ? '#dc3545' : // Red border for grouped notes
-                        isMagneticallyAffected ? '#ffc107' : // Yellow border for proximity magnetic notes
-                        isSelected ? '#4aa3ff' : 'rgba(0,0,0,0.2)'
-      ctx.lineWidth = isSearchHighlighted ? 4 : // Extra thick border for search results
-                      isMovementModeActive ? 3 :
-                      isMagneticallyGrouped ? 3 : // Thicker border for grouped notes
-                      isMagneticallyAffected ? 2 :
-                      isSelected ? 2 : 1
-      const radius = 8
+      // Modern gradient backgrounds
+      if (isSearchHighlighted) {
+        // Magical search highlight gradient
+        const gradient = ctx.createLinearGradient(r.x, r.y, r.x, r.y + r.h)
+        gradient.addColorStop(0, 'rgba(255, 235, 59, 0.4)')
+        gradient.addColorStop(1, 'rgba(255, 193, 7, 0.2)')
+        ctx.fillStyle = gradient
+      } else if (isSelected || isMovementModeActive) {
+        // Selected note gradient
+        const gradient = ctx.createLinearGradient(r.x, r.y, r.x, r.y + r.h)
+        gradient.addColorStop(0, 'rgba(255, 255, 255, 0.98)')
+        gradient.addColorStop(1, 'rgba(248, 250, 252, 0.95)')
+        ctx.fillStyle = gradient
+      } else if (isMagneticallyGrouped) {
+        // Magnetic group gradient
+        const gradient = ctx.createLinearGradient(r.x, r.y, r.x, r.y + r.h)
+        gradient.addColorStop(0, 'rgba(254, 242, 242, 0.9)')
+        gradient.addColorStop(1, 'rgba(254, 226, 226, 0.8)')
+        ctx.fillStyle = gradient
+      } else if (isMagneticallyAffected) {
+        // Magnetic proximity gradient
+        const gradient = ctx.createLinearGradient(r.x, r.y, r.x, r.y + r.h)
+        gradient.addColorStop(0, 'rgba(254, 249, 195, 0.8)')
+        gradient.addColorStop(1, 'rgba(254, 240, 138, 0.7)')
+        ctx.fillStyle = gradient
+      } else if (isInStack) {
+        // Stack note gradient
+        const gradient = ctx.createLinearGradient(r.x, r.y, r.x, r.y + r.h)
+        gradient.addColorStop(0, 'rgba(248, 250, 252, 0.98)')
+        gradient.addColorStop(1, 'rgba(241, 245, 249, 0.95)')
+        ctx.fillStyle = gradient
+      } else {
+        // Default note gradient
+        const gradient = ctx.createLinearGradient(r.x, r.y, r.x, r.y + r.h)
+        gradient.addColorStop(0, n.faded ? 'rgba(248, 250, 252, 0.4)' : 'rgba(255, 255, 255, 0.98)')
+        gradient.addColorStop(1, n.faded ? 'rgba(241, 245, 249, 0.3)' : 'rgba(248, 250, 252, 0.95)')
+        ctx.fillStyle = gradient
+      }
+
+      // Modern border styling
+      const borderColors = {
+        searchHighlighted: '#fbbf24', // Warm yellow
+        selected: '#3b82f6', // Blue
+        movementMode: '#6366f1', // Indigo
+        magneticGrouped: '#ef4444', // Red
+        magneticAffected: '#f59e0b', // Amber
+        stack: 'rgba(59, 130, 246, 0.6)', // Light blue
+        default: 'rgba(15, 23, 42, 0.15)' // Slate
+      }
+
+      ctx.strokeStyle = isSearchHighlighted ? borderColors.searchHighlighted :
+                        isMovementModeActive ? borderColors.movementMode :
+                        isMagneticallyGrouped ? borderColors.magneticGrouped :
+                        isMagneticallyAffected ? borderColors.magneticAffected :
+                        isSelected ? borderColors.selected :
+                        isInStack ? borderColors.stack :
+                        borderColors.default
+
+      ctx.lineWidth = isSearchHighlighted ? 3 :
+                      isMovementModeActive || isSelected ? 2.5 :
+                      isMagneticallyGrouped || isMagneticallyAffected ? 2 :
+                      isInStack ? 1.5 :
+                      1
+
+      // Modern rounded corners
+      const radius = isSelected ? 14 : isInStack ? 10 : 8
+      
+      // Draw the note with modern styling
       roundRect(ctx, r.x, r.y, r.w, r.h, radius)
       ctx.fill()
       ctx.stroke()
+
+      // Add inner highlight for selected notes
+      if (isSelected && !n.faded) {
+        ctx.save()
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)'
+        ctx.lineWidth = 1
+        roundRect(ctx, r.x + 1, r.y + 1, r.w - 2, r.h - 2, radius - 1)
+        ctx.stroke()
+        ctx.restore()
+      }
 
       // text
       const pad = 8 * transform.scale
@@ -973,7 +1133,7 @@ export function Canvas({ notes, connections = [], shapes = [], stacks = [], sele
         Math.pow(pos.y - lastClickPos.current.y, 2)
       )
       
-      const hit = hitTest(notes, world)
+      const hit = hitTest(notes, world, stacks)
       const connectionHit = hitTestConnectionLabel(connections, notes, world, transform)
       const connectionLineHit = hitTestConnectionLine(connections, notes, world, 8 / transform.scale)
       const endpointHit = hitTestConnectionEndpoint(connections, notes, world, 12 / transform.scale)
@@ -1347,7 +1507,7 @@ export function Canvas({ notes, connections = [], shapes = [], stacks = [], sele
           }
         } else if (dragging.type === 'move-connection-endpoint' && dragging.connectionId && dragging.originalConnection && onConnectionsChange) {
           // Find the target note at current position
-          const targetNote = hitTest(notes, currWorld)
+          const targetNote = hitTest(notes, currWorld, stacks)
 
           if (targetNote && targetNote.id !== dragging.originalConnection.id) {
             // Create updated connection with new endpoint
@@ -1395,7 +1555,7 @@ export function Canvas({ notes, connections = [], shapes = [], stacks = [], sele
             else if (handle === 'e') newCursor = 'e-resize'
             else if (handle === 's') newCursor = 's-resize'
             else {
-              const hit = hitTest(notes, currWorld)
+              const hit = hitTest(notes, currWorld, stacks)
               if (hit) newCursor = movementMode ? 'move' : 'move'
             }
           } else if (selectedShape) {
@@ -1408,12 +1568,12 @@ export function Canvas({ notes, connections = [], shapes = [], stacks = [], sele
               if (shapeHit) newCursor = movementMode ? 'move' : 'move'
             }
           } else {
-            const hit = hitTest(notes, currWorld)
+            const hit = hitTest(notes, currWorld, stacks)
             const shapeHit = hitTestShape(shapes, currWorld)
             if (hit || shapeHit) newCursor = movementMode ? 'move' : 'move'
           }
         } else {
-          const hit = hitTest(notes, currWorld)
+          const hit = hitTest(notes, currWorld, stacks)
           const shapeHit = hitTestShape(shapes, currWorld)
           if (hit || shapeHit) newCursor = movementMode ? 'move' : 'move'
         }
@@ -1429,7 +1589,7 @@ export function Canvas({ notes, connections = [], shapes = [], stacks = [], sele
         if (rect) {
           const pos = { x: e.clientX - rect.left, y: e.clientY - rect.top }
           const world = invTransform(transform, pos)
-          const targetNote = hitTest(notes, world)
+          const targetNote = hitTest(notes, world, stacks)
           
           if (targetNote && targetNote.id !== dragging.sourceNoteId) {
             createConnection(dragging.sourceNoteId, targetNote.id)
@@ -1860,10 +2020,24 @@ function renderMarkdownText(
   renderCurrentLine()
 }
 
-function hitTest(notes: Note[], pWorld: Point): Note | null {
+function hitTest(notes: Note[], pWorld: Point, stacks?: Stack[]): Note | null {
   for (let i = notes.length - 1; i >= 0; i--) {
     const n = notes[i]
-    const r = n.frame
+    let r = n.frame
+    
+    // Apply stack indentation for hit testing
+    if (n.stackId && stacks) {
+      const stack = stacks.find(s => s.id === n.stackId)
+      if (stack && stack.indentLevels) {
+        const indentLevel = stack.indentLevels[n.id] || 0
+        const indentOffset = indentLevel * 20 // 20px per indent level
+        r = {
+          ...r,
+          x: r.x + indentOffset
+        }
+      }
+    }
+    
     if (pWorld.x >= r.x && pWorld.x <= r.x + r.w && pWorld.y >= r.y && pWorld.y <= r.y + r.h) return n
   }
   return null

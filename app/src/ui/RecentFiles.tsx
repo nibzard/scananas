@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { getRecentFiles, clearRecentFiles } from '../bridge/tauri'
+import { ModernButton } from './components/ModernButton'
 
 interface RecentFilesProps {
   onOpenRecentFile: (filePath: string) => void
@@ -67,30 +68,39 @@ export function RecentFiles({ onOpenRecentFile }: RecentFilesProps) {
 
   return (
     <div style={{ position: 'relative' }}>
-      <button
+      <ModernButton
         onClick={() => setIsOpen(!isOpen)}
-        style={{
-          ...buttonStyle,
-          background: isOpen ? '#4aa3ff' : '#333',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6
-        }}
+        variant={isOpen ? 'primary' : 'ghost'}
+        size="sm"
+        icon={<span style={{ fontSize: '14px' }}>📂</span>}
         title="Open recent file"
+        style={{
+          position: 'relative'
+        }}
       >
-        📂 Open Recent…
+        Recent
         {recentFiles.length > 0 && (
           <span style={{
-            opacity: 0.7,
+            position: 'absolute',
+            top: '-6px',
+            right: '-6px',
+            background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+            color: 'white',
             fontSize: '10px',
-            background: 'rgba(255,255,255,0.2)',
-            padding: '2px 4px',
-            borderRadius: '3px'
+            fontWeight: 'bold',
+            padding: '2px 6px',
+            borderRadius: '10px',
+            minWidth: '16px',
+            height: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 2px 8px rgba(239, 68, 68, 0.4)'
           }}>
             {recentFiles.length}
           </span>
         )}
-      </button>
+      </ModernButton>
 
       {isOpen && (
         <>
@@ -113,42 +123,48 @@ export function RecentFiles({ onOpenRecentFile }: RecentFilesProps) {
               position: 'absolute',
               top: '100%',
               left: 0,
-              background: '#2a2a2a',
-              border: '1px solid #444',
-              borderRadius: 6,
-              boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-              minWidth: 280,
-              maxWidth: 400,
+              background: 'rgba(17, 24, 39, 0.95)',
+              backdropFilter: 'blur(20px)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: 12,
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.1)',
+              minWidth: 320,
+              maxWidth: 450,
               zIndex: 1000,
-              overflow: 'hidden'
+              overflow: 'hidden',
+              marginTop: '8px'
             }}
           >
             {/* Header */}
             <div style={{
-              padding: '8px 12px',
-              borderBottom: '1px solid #444',
-              fontSize: '12px',
-              fontWeight: 'bold',
-              color: '#ccc',
+              padding: '16px 16px 12px 16px',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center'
             }}>
-              Recent Files
+              <span style={{
+                fontSize: '14px',
+                fontWeight: 600,
+                color: '#f1f5f9',
+                fontFamily: 'system-ui, -apple-system, sans-serif'
+              }}>
+                Recent Files
+              </span>
               {recentFiles.length > 0 && (
-                <button
+                <ModernButton
                   onClick={handleClearRecentFiles}
-                  style={{
-                    ...smallButtonStyle,
-                    background: 'transparent',
-                    color: '#999',
-                    fontSize: '10px',
-                    padding: '2px 6px'
-                  }}
+                  variant="ghost"
+                  size="sm"
                   title="Clear recent files"
+                  style={{
+                    fontSize: '11px',
+                    padding: '4px 8px',
+                    color: 'rgba(148, 163, 184, 0.8)'
+                  }}
                 >
                   Clear All
-                </button>
+                </ModernButton>
               )}
             </div>
 
